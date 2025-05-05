@@ -18,9 +18,11 @@ export default function RandomChat() {
   // Initialize socket connection
   useEffect(() => {
     // Connect to the socket server
-    socketRef.current = io("http://localhost:5000", {
-      transports: ["websocket"],
-    })
+    socketRef.current = io('https://muntajir.me', {
+      path: '/socket.io',
+      transports: ['websocket'],
+      secure: true
+    });
 
     const socket = socketRef.current
 
