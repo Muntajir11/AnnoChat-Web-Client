@@ -5,118 +5,103 @@ import { io, type Socket } from "socket.io-client"
 import { Send, UserRound, Users, RefreshCw } from "lucide-react"
 
 export default function RandomChat() {
-  const [messages, setMessages] = useState<{ text: string; sender: "you" | "stranger" }[]>([])
+  // ─── Local state ──────────────────────────────────────────────────────────────
+  const [messages, setMessages] = useState<
+    { text: string; sender: "you" | "stranger" }[]
+  >([])
   const [inputValue, setInputValue] = useState("")
   const [status, setStatus] = useState("Waiting for a match...")
   const [onlineUsers, setOnlineUsers] = useState(0)
   const [roomId, setRoomId] = useState<string | null>(null)
   const [isConnected, setIsConnected] = useState(false)
 
+  // ─── Refs ─────────────────────────────────────────────────────────────────────
   const socketRef = useRef<Socket | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Initialize socket connection
-  useEffect(() => {
-    // Connect to the socket server
-    socketRef.current = io('https://muntajir.me', {
-      path: '/socket.io',
-      transports: ['websocket'],
-      secure: true
-    });
+  // ─── Configuration ────────────────────────────────────────────────────────────
+  const SERVER_URL = "https://muntajir.me"
+  const SOCKET_PATH = "/socket.io"
 
-    const socket = socketRef.current
+  // ─── Core socket connection logic ─────────────────────────────────────────────
+  function connectSocket() {
+    // If we’re already connected, tear down first
+    if (socketRef.current) {
+      socketRef.current.removeAllListeners()
+      socketRef.current.disconnect()
+    }
 
-    // Handle matching with another user
+    // Create a fresh Socket.IO connection
+    const socket = io(SERVER_URL, {
+      path: SOCKET_PATH,
+      transports: ["websocket"],
+      secure: true,
+    })
+    socketRef.current = socket
+
+    // When we’ve been paired in a chat room
     socket.on("matched", ({ roomId, partnerId }) => {
-      console.log(`You are matched with user ${partnerId}`)
-      setStatus("You are matched with a stranger!")
+      setStatus("Matched! Say hello to your stranger.")
       setRoomId(roomId)
       setIsConnected(true)
-      console.log("Room ID set:", roomId)
+      console.log(`Matched with ${partnerId} in room ${roomId}`)
     })
 
-    // Handle receiving messages
-    socket.on("chat message", (data) => {
-      console.table(data)
-      setMessages((prev) => [...prev, { text: data.msg, sender: "stranger" }])
+    // Incoming chat messages
+    socket.on("chat message", ({ msg }) => {
+      setMessages((prev) => [...prev, { text: msg, sender: "stranger" }])
     })
 
-    // Handle user disconnection
-    socket.on("user disconnected", (userId) => {
-      setStatus("Stranger disconnected.")
+    // The other user left
+    socket.on("user disconnected", () => {
+      setStatus("Your stranger left the chat.")
       setIsConnected(false)
     })
 
-    // Handle online users count
-    socket.on("onlineUsers", (count) => {
+    // Live count of people looking for a chat
+    socket.on("onlineUsers", (count: number) => {
       setOnlineUsers(count)
     })
+  }
 
-    // Cleanup on component unmount
+  // ─── On component mount ───────────────────────────────────────────────────────
+  useEffect(() => {
+    connectSocket()
+
+    // Clean up on unmount
     return () => {
-      socket.disconnect()
+      socketRef.current?.removeAllListeners()
+      socketRef.current?.disconnect()
     }
   }, [])
 
-  // Auto-scroll to the latest message
+  // ─── Auto-scroll to newest message ─────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
-  // Handle sending a message
+  // ─── Send a chat message ──────────────────────────────────────────────────────
   const handleSendMessage = (e: FormEvent) => {
     e.preventDefault()
+    if (!isConnected || !inputValue.trim() || !roomId) return
 
-    if (inputValue.trim() && roomId && socketRef.current) {
-      // Add message to local state
-      setMessages((prev) => [...prev, { text: inputValue, sender: "you" }])
-
-      // Send message to server
-      socketRef.current.emit("chat message", { msg: inputValue, roomId })
-
-      // Clear input field
-      setInputValue("")
-    }
+    // Show message locally
+    setMessages((prev) => [...prev, { text: inputValue, sender: "you" }])
+    // Dispatch to server
+    socketRef.current!.emit("chat message", { msg: inputValue, roomId })
+    // Clear the input
+    setInputValue("")
   }
 
-  // Handle finding a new match
+  // ─── Find a brand-new stranger ────────────────────────────────────────────────
   const handleFindNew = () => {
-    if (socketRef.current) {
-      socketRef.current.disconnect()
-
-      // Reconnect to find a new match
-      socketRef.current = io("http://localhost:5000", {
-        transports: ["websocket"],
-      })
-
-      // Reset state
-      setMessages([])
-      setRoomId(null)
-      setStatus("Waiting for a match...")
-      setIsConnected(false)
-
-      // Re-register event handlers
-      const socket = socketRef.current
-
-      socket.on("matched", ({ roomId, partnerId }) => {
-        setStatus("You are matched with a stranger!")
-        setRoomId(roomId)
-        setIsConnected(true)
-      })
-
-      socket.on("chat message", (data) => {
-        setMessages((prev) => [...prev, { text: data.msg, sender: "stranger" }])
-      })
-
-      socket.on("user disconnected", () => {
-        setStatus("Stranger disconnected.")
-        setIsConnected(false)
-      })
-
-      socket.on("onlineUsers", (count) => {
-        setOnlineUsers(count)
-      })
-    }
+    // Reset UI state
+    setMessages([])
+    setRoomId(null)
+    setStatus("Waiting for a match...")
+    setIsConnected(false)
+    // Kick off a fresh socket cycle
+    connectSocket()
   }
 
   return (
@@ -133,36 +118,50 @@ export default function RandomChat() {
         </div>
       </header>
 
-      {/* Status */}
+      {/* Status Bar */}
       <div className="bg-gray-800/50 p-3 text-center border-b border-gray-700">
-        <p className={`text-sm font-medium ${isConnected ? "text-emerald-400" : "text-amber-400"}`}>{status}</p>
+        <p
+          className={`text-sm font-medium ${
+            isConnected ? "text-emerald-400" : "text-amber-400"
+          }`}
+        >
+          {status}
+        </p>
       </div>
 
-      {/* Messages */}
+      {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map((message, index) => (
-          <div key={index} className={`flex ${message.sender === "you" ? "justify-end" : "justify-start"}`}>
+        {messages.map((msg, i) => (
+          <div
+            key={i}
+            className={`flex ${
+              msg.sender === "you" ? "justify-end" : "justify-start"
+            }`}
+          >
             <div
               className={`max-w-[80%] px-4 py-2 rounded-2xl ${
-                message.sender === "you"
+                msg.sender === "you"
                   ? "bg-emerald-600 text-white rounded-tr-none"
                   : "bg-gray-700 text-gray-100 rounded-tl-none"
               }`}
             >
-              {message.text}
+              {msg.text}
             </div>
           </div>
         ))}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Form */}
-      <form onSubmit={handleSendMessage} className="bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2">
+      {/* Message Input */}
+      <form
+        onSubmit={handleSendMessage}
+        className="bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2"
+      >
         <input
           type="text"
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
-          placeholder="Type a message..."
+          placeholder="Type a message…"
           disabled={!isConnected}
           className="flex-1 bg-gray-700 text-gray-100 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
