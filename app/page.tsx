@@ -25,13 +25,11 @@ export default function RandomChat() {
 
   // ─── Core socket connection logic ─────────────────────────────────────────────
   function connectSocket() {
-    // If we’re already connected, tear down first
     if (socketRef.current) {
       socketRef.current.removeAllListeners()
       socketRef.current.disconnect()
     }
 
-    // Create a fresh Socket.IO connection
     const socket = io(SERVER_URL, {
       path: SOCKET_PATH,
       transports: ["websocket"],
@@ -39,7 +37,6 @@ export default function RandomChat() {
     })
     socketRef.current = socket
 
-    // When we’ve been paired in a chat room
     socket.on("matched", ({ roomId, partnerId }) => {
       setStatus("Matched! Say hello to your stranger.")
       setRoomId(roomId)
@@ -47,18 +44,15 @@ export default function RandomChat() {
       console.log(`Matched with ${partnerId} in room ${roomId}`)
     })
 
-    // Incoming chat messages
     socket.on("chat message", ({ msg }) => {
       setMessages((prev) => [...prev, { text: msg, sender: "stranger" }])
     })
 
-    // The other user left
     socket.on("user disconnected", () => {
       setStatus("Your stranger left the chat.")
       setIsConnected(false)
     })
 
-    // Live count of people looking for a chat
     socket.on("onlineUsers", (count: number) => {
       setOnlineUsers(count)
     })
@@ -67,8 +61,6 @@ export default function RandomChat() {
   // ─── On component mount ───────────────────────────────────────────────────────
   useEffect(() => {
     connectSocket()
-
-    // Clean up on unmount
     return () => {
       socketRef.current?.removeAllListeners()
       socketRef.current?.disconnect()
@@ -85,22 +77,17 @@ export default function RandomChat() {
     e.preventDefault()
     if (!isConnected || !inputValue.trim() || !roomId) return
 
-    // Show message locally
     setMessages((prev) => [...prev, { text: inputValue, sender: "you" }])
-    // Dispatch to server
     socketRef.current!.emit("chat message", { msg: inputValue, roomId })
-    // Clear the input
     setInputValue("")
   }
 
   // ─── Find a brand-new stranger ────────────────────────────────────────────────
   const handleFindNew = () => {
-    // Reset UI state
     setMessages([])
     setRoomId(null)
     setStatus("Waiting for a match...")
     setIsConnected(false)
-    // Kick off a fresh socket cycle
     connectSocket()
   }
 
@@ -157,6 +144,15 @@ export default function RandomChat() {
         onSubmit={handleSendMessage}
         className="bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2"
       >
+        {/* ← Find New button moved here */}
+        <button
+          type="button"
+          onClick={handleFindNew}
+          className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full"
+        >
+          <RefreshCw className="w-5 h-5" />
+        </button>
+
         <input
           type="text"
           value={inputValue}
@@ -165,19 +161,13 @@ export default function RandomChat() {
           disabled={!isConnected}
           className="flex-1 bg-gray-700 text-gray-100 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
+
         <button
           type="submit"
           disabled={!isConnected || !inputValue.trim()}
           className="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Send className="w-5 h-5" />
-        </button>
-        <button
-          type="button"
-          onClick={handleFindNew}
-          className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full"
-        >
-          <RefreshCw className="w-5 h-5" />
         </button>
       </form>
     </div>
