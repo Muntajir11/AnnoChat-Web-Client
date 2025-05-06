@@ -1,95 +1,108 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useRef, type FormEvent } from "react"
-import { io, type Socket } from "socket.io-client"
-import { Send, UserRound, Users, RefreshCw } from "lucide-react"
+import { useEffect, useState, useRef, type FormEvent } from "react";
+import { io, type Socket } from "socket.io-client";
+import { Send, UserRound, Users, RefreshCw } from "lucide-react";
 
 export default function RandomChat() {
   // ─── Local state ──────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<
     { text: string; sender: "you" | "stranger" }[]
-  >([])
-  const [inputValue, setInputValue] = useState("")
-  const [status, setStatus] = useState("Waiting for a match...")
-  const [onlineUsers, setOnlineUsers] = useState(0)
-  const [roomId, setRoomId] = useState<string | null>(null)
-  const [isConnected, setIsConnected] = useState(false)
+  >([]);
+  const [inputValue, setInputValue] = useState("");
+  // ← initial prompt
+  const [status, setStatus] = useState('Press "Find" to start chatting');
+  const [onlineUsers, setOnlineUsers] = useState(0);
+  const [roomId, setRoomId] = useState<string | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
 
   // ─── Refs ─────────────────────────────────────────────────────────────────────
-  const socketRef = useRef<Socket | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const socketRef = useRef<Socket | null>(null);
+  const presenceRef = useRef<Socket>(
+    io(`http://localhost:5000/presence`, {
+      autoConnect: false,
+      transports: ["websocket"],
+    })
+  );
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ─── Configuration ────────────────────────────────────────────────────────────
-  const SERVER_URL = "https://muntajir.me"
-  const SOCKET_PATH = "/socket.io"
+  const SERVER_URL = "http://localhost:5000";
+  const SOCKET_PATH = "/socket.io";
 
   // ─── Core socket connection logic ─────────────────────────────────────────────
   function connectSocket() {
     if (socketRef.current) {
-      socketRef.current.removeAllListeners()
-      socketRef.current.disconnect()
+      socketRef.current.removeAllListeners();
+      socketRef.current.disconnect();
     }
 
     const socket = io(SERVER_URL, {
       path: SOCKET_PATH,
       transports: ["websocket"],
       secure: true,
-    })
-    socketRef.current = socket
+    });
+    socketRef.current = socket;
 
     socket.on("matched", ({ roomId, partnerId }) => {
-      setStatus("Matched! Say hello to your stranger.")
-      setRoomId(roomId)
-      setIsConnected(true)
-      console.log(`Matched with ${partnerId} in room ${roomId}`)
-    })
+      setStatus("Matched! Say hello to your stranger.");
+      setRoomId(roomId);
+      setIsConnected(true);
+      console.log(`Matched with ${partnerId} in room ${roomId}`);
+    });
 
     socket.on("chat message", ({ msg }) => {
-      setMessages((prev) => [...prev, { text: msg, sender: "stranger" }])
-    })
+      setMessages((prev) => [...prev, { text: msg, sender: "stranger" }]);
+    });
 
     socket.on("user disconnected", () => {
-      setStatus("Your stranger left the chat.")
-      setIsConnected(false)
-    })
-
-    socket.on("onlineUsers", (count: number) => {
-      setOnlineUsers(count)
-    })
+      // just show the message; don't flip you back to “Waiting”
+      setStatus('Stranger disconnected. Press "Find" to start again.');
+    });
   }
 
   // ─── On component mount ───────────────────────────────────────────────────────
   useEffect(() => {
-    connectSocket()
+    // Presence socket: connect once
+    const pres = presenceRef.current;
+    pres.connect();
+    pres.on("onlineUsers", setOnlineUsers);
+
+    // Initial chat socket setup (won’t queue until you tap “Find”)
+    connectSocket();
+
     return () => {
-      socketRef.current?.removeAllListeners()
-      socketRef.current?.disconnect()
-    }
-  }, [])
+      socketRef.current?.removeAllListeners();
+      socketRef.current?.disconnect();
+
+      pres.off("onlineUsers", setOnlineUsers);
+      pres.disconnect();
+    };
+  }, []);
 
   // ─── Auto-scroll to newest message ─────────────────────────────────────────────
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   // ─── Send a chat message ──────────────────────────────────────────────────────
   const handleSendMessage = (e: FormEvent) => {
-    e.preventDefault()
-    if (!isConnected || !inputValue.trim() || !roomId) return
+    e.preventDefault();
+    if (!isConnected || !inputValue.trim() || !roomId) return;
 
-    setMessages((prev) => [...prev, { text: inputValue, sender: "you" }])
-    socketRef.current!.emit("chat message", { msg: inputValue, roomId })
-    setInputValue("")
-  }
+    setMessages((prev) => [...prev, { text: inputValue, sender: "you" }]);
+    socketRef.current!.emit("chat message", { msg: inputValue, roomId });
+    setInputValue("");
+  };
 
   // ─── Find a brand-new stranger ────────────────────────────────────────────────
   const handleFindNew = () => {
-    setMessages([])
-    setRoomId(null)
-    setStatus("Waiting for a match...")
-    setIsConnected(false)
-    connectSocket()
-  }
+    setMessages([]);
+    setRoomId(null);
+    setStatus("Searching for a match...");
+    setIsConnected(false);
+    connectSocket();
+  };
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
@@ -109,7 +122,7 @@ export default function RandomChat() {
       <div className="bg-gray-800/50 p-3 text-center border-b border-gray-700">
         <p
           className={`text-sm font-medium ${
-            isConnected ? "text-emerald-400" : "text-amber-400"
+            status.includes("Matched") ? "text-emerald-400" : "text-amber-400"
           }`}
         >
           {status}
@@ -144,7 +157,7 @@ export default function RandomChat() {
         onSubmit={handleSendMessage}
         className="bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2"
       >
-        {/* ← Find New button moved here */}
+        {/* ← Find New button */}
         <button
           type="button"
           onClick={handleFindNew}
@@ -171,5 +184,5 @@ export default function RandomChat() {
         </button>
       </form>
     </div>
-  )
+  );
 }
