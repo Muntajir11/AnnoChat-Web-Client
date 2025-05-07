@@ -19,15 +19,16 @@ export default function RandomChat() {
   // ─── Refs ─────────────────────────────────────────────────────────────────────
   const socketRef = useRef<Socket | null>(null);
   const presenceRef = useRef<Socket>(
-    io(`http://localhost:5000/presence`, {
+    io(`https://muntajir.me/presence`, {
       autoConnect: false,
       transports: ["websocket"],
+      secure: true,
     })
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ─── Configuration ────────────────────────────────────────────────────────────
-  const SERVER_URL = "http://localhost:5000";
+  const SERVER_URL = "https://muntajir.me";
   const SOCKET_PATH = "/socket.io";
 
   // ─── Core socket connection logic ─────────────────────────────────────────────
