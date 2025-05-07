@@ -10,26 +10,29 @@ export default function RandomChat() {
     { text: string; sender: "you" | "stranger" }[]
   >([]);
   const [inputValue, setInputValue] = useState("");
-  // ← initial prompt
   const [status, setStatus] = useState('Press "Find" to start chatting');
   const [onlineUsers, setOnlineUsers] = useState(0);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
+  // ─── Configuration ────────────────────────────────────────────────────────────
+  const SERVER_URL = "https://muntajir.me";
+  const SOCKET_PATH = "/socket.io";
+
   // ─── Refs ─────────────────────────────────────────────────────────────────────
   const socketRef = useRef<Socket | null>(null);
+
+  // ← Updated presenceRef to connect via the same /socket.io path but namespace URL
   const presenceRef = useRef<Socket>(
-    io(`https://muntajir.me/presence`, {
+    io(`${SERVER_URL}/presence`, {
+      path: SOCKET_PATH,
       autoConnect: false,
       transports: ["websocket"],
       secure: true,
     })
   );
-  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // ─── Configuration ────────────────────────────────────────────────────────────
-  const SERVER_URL = "https://muntajir.me";
-  const SOCKET_PATH = "/socket.io";
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ─── Core socket connection logic ─────────────────────────────────────────────
   function connectSocket() {
@@ -57,19 +60,17 @@ export default function RandomChat() {
     });
 
     socket.on("user disconnected", () => {
-      // just show the message; don't flip you back to “Waiting”
       setStatus('Stranger disconnected. Press "Find" to start again.');
     });
   }
 
   // ─── On component mount ───────────────────────────────────────────────────────
   useEffect(() => {
-    // Presence socket: connect once
+    // ← Now simply call connect() with no args
     const pres = presenceRef.current;
     pres.connect();
     pres.on("onlineUsers", setOnlineUsers);
 
-    // Initial chat socket setup (won’t queue until you tap “Find”)
     connectSocket();
 
     return () => {
@@ -158,7 +159,6 @@ export default function RandomChat() {
         onSubmit={handleSendMessage}
         className="bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2"
       >
-        {/* ← Find New button */}
         <button
           type="button"
           onClick={handleFindNew}
