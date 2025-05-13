@@ -94,7 +94,7 @@ export default function RandomChat() {
 
     setMessages((prev) => [...prev, { text: inputValue, sender: "you" }]);
     socketRef.current!.emit("chat message", { msg: inputValue, roomId });
-    setInputValue("");
+  setInputValue("");
   };
 
   // ─── Find a brand-new stranger ────────────────────────────────────────────────
@@ -107,10 +107,9 @@ export default function RandomChat() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
-
-
-      <div className="sticky top-0 z-10">
+    <div
+  className="flex flex-col min-h-screen bg-gray-900 text-gray-100">
+      <div className="sticky top-0 z-50">
         {/* Header */}
       <header className="bg-gray-800 p-4 shadow-md flex justify-between items-center">
         <h1 className="text-xl font-bold text-emerald-400 flex items-center">
@@ -162,9 +161,9 @@ export default function RandomChat() {
 
       {/* Message Input */}
       <form
-        onSubmit={handleSendMessage}
-        className="sticky bottom-0 z-10 bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2"
-      >
+  onSubmit={handleSendMessage}
+  className="bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2 sticky bottom-0 z-50"
+>
         <button
           type="button"
           onClick={handleFindNew}
