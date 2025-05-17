@@ -46,8 +46,6 @@ export default function RandomChat() {
       setStatus("Matched! Say hello to your stranger.");
       setRoomId(newRoom);
       setIsConnected(true);
-
-      // Join the room
       socket.emit("join room", newRoom);
     });
 
@@ -110,7 +108,6 @@ export default function RandomChat() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
-      {/* Header */}
       <header className="bg-gray-800 p-4 shadow-md flex justify-between items-center">
         <h1 className="text-xl font-bold text-emerald-400 flex items-center">
           <UserRound className="mr-2" />
@@ -122,7 +119,6 @@ export default function RandomChat() {
         </div>
       </header>
 
-      {/* Status Bar */}
       <div className="bg-gray-800/50 p-3 text-center border-b border-gray-700">
         <p
           className={`text-sm font-medium ${
@@ -133,7 +129,6 @@ export default function RandomChat() {
         </p>
       </div>
 
-      {/* Chat Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.map((msg, i) => (
           <div
@@ -156,7 +151,6 @@ export default function RandomChat() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Message Input */}
       <form
         onSubmit={handleSendMessage}
         className="bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2"
