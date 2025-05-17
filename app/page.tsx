@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useEffect, useState, useRef, type FormEvent } from "react";
 import { io, type Socket } from "socket.io-client";
@@ -20,7 +20,6 @@ export default function RandomChat() {
       autoConnect: false,
       transports: ["websocket"],
       secure: true,
-      path: "/socket.io",
     })
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -38,15 +37,16 @@ export default function RandomChat() {
       path: SOCKET_PATH,
       transports: ["websocket"],
       secure: true,
-      autoConnect: false,
     });
     socketRef.current = socket;
 
-    socket.on("matched", ({ roomId: newRoom }) => {
+    socket.on("matched", ({ roomId, partnerId }) => {
       setStatus("Matched! Say hello to your stranger.");
-      setRoomId(newRoom);
+      setRoomId(roomId);
       setIsConnected(true);
-      socket.emit("join room", newRoom);
+      console.log(`Matched with ${partnerId} in room ${roomId}`);
+
+      socket.emit("join room", roomId);
     });
 
     socket.on("chat message", ({ msg }) => {
@@ -56,8 +56,6 @@ export default function RandomChat() {
     socket.on("user disconnected", () => {
       setStatus('Stranger disconnected. Press "Find" to start again.');
     });
-
-    socket.connect();
   }
 
   useEffect(() => {
@@ -65,24 +63,22 @@ export default function RandomChat() {
     pres.connect();
     pres.on("onlineUsers", setOnlineUsers);
 
-    // Before the page unloads, tell server you’re leaving
+    connectSocket();
+
     const handleBeforeUnload = () => {
       if (socketRef.current && roomId) {
         socketRef.current.emit("leave_room", { roomId });
-        socketRef.current.close();
       }
     };
+
     window.addEventListener("beforeunload", handleBeforeUnload);
 
-    // Initial chat socket setup
-    connectSocket();
-
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
       socketRef.current?.removeAllListeners();
       socketRef.current?.disconnect();
       pres.off("onlineUsers", setOnlineUsers);
       pres.disconnect();
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [roomId]);
 
@@ -93,6 +89,7 @@ export default function RandomChat() {
   const handleSendMessage = (e: FormEvent) => {
     e.preventDefault();
     if (!isConnected || !inputValue.trim() || !roomId) return;
+
     setMessages((prev) => [...prev, { text: inputValue, sender: "you" }]);
     socketRef.current!.emit("chat message", { msg: inputValue, roomId });
     setInputValue("");
@@ -155,7 +152,6 @@ export default function RandomChat() {
         onSubmit={handleSendMessage}
         className="bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2"
       >
-        {/* Find New button */}
         <button
           type="button"
           onClick={handleFindNew}
@@ -163,6 +159,7 @@ export default function RandomChat() {
         >
           <RefreshCw className="w-5 h-5" />
         </button>
+
         <input
           type="text"
           value={inputValue}
@@ -171,6 +168,7 @@ export default function RandomChat() {
           disabled={!isConnected}
           className="flex-1 bg-gray-700 text-gray-100 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
+
         <button
           type="submit"
           disabled={!isConnected || !inputValue.trim()}
