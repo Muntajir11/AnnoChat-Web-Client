@@ -24,6 +24,8 @@ export default function RandomChat() {
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+
+  // useRef for the socket connection
   const SERVER_URL = "https://muntajir.me";
   const SOCKET_PATH = "/socket.io";
 
