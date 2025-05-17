@@ -46,6 +46,7 @@ export default function RandomChat() {
       setIsConnected(true);
       console.log(`Matched with ${partnerId} in room ${roomId}`);
 
+      // 🔥 New addition: inform server to join this room
       socket.emit("join room", roomId);
     });
 
@@ -65,22 +66,13 @@ export default function RandomChat() {
 
     connectSocket();
 
-    const handleBeforeUnload = () => {
-      if (socketRef.current && roomId) {
-        socketRef.current.emit("leave_room", { roomId });
-      }
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
     return () => {
       socketRef.current?.removeAllListeners();
       socketRef.current?.disconnect();
       pres.off("onlineUsers", setOnlineUsers);
       pres.disconnect();
-      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [roomId]);
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
