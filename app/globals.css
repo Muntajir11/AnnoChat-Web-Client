@@ -2,13 +2,17 @@
 
 
 
-html, body {
-  padding: 0;
-  margin: 0;
-  height: 100%;
+:root {
+  --vh: 100vh;
 }
 
+@supports (height: 100dvh) {
+  :root {
+    --vh: 100dvh;
+  }
+}
+
+html,
 body {
-  display: flex;
-  flex-direction: column;
+  height: var(--vh);
 }

@@ -79,6 +79,20 @@ export default function RandomChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+  const input = document.querySelector("input");
+
+  const handleFocus = () => {
+    setTimeout(() => {
+      input?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 300);
+  };
+
+  input?.addEventListener("focus", handleFocus);
+  return () => input?.removeEventListener("focus", handleFocus);
+}, []);
+
+
   const handleSendMessage = (e: FormEvent) => {
     e.preventDefault();
     if (!isConnected || !inputValue.trim() || !roomId) return;
@@ -97,7 +111,7 @@ export default function RandomChat() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-900 text-gray-100">
+    <div className="flex flex-col h-[100dvh] bg-gray-900 text-gray-100">
       <header className="bg-gray-800 p-4 shadow-md flex justify-between items-center">
         <h1 className="text-xl font-bold text-emerald-400 flex items-center">
           <UserRound className="mr-2" />
