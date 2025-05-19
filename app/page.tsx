@@ -24,7 +24,6 @@ export default function RandomChat() {
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-
   // useRef for the socket connection
   const SERVER_URL = "https://muntajir.me";
   const SOCKET_PATH = "/socket.io";
@@ -129,7 +128,7 @@ export default function RandomChat() {
             }`}
           >
             <div
-              className={`max-w-[80%] px-4 py-2 rounded-2xl ${
+              className={`px-4 py-2 rounded-2xl break-words whitespace-pre-wrap max-w-xs sm:max-w-md md:max-w-lg lg:max-w-xl overflow-auto ${
                 msg.sender === "you"
                   ? "bg-emerald-600 text-white rounded-tr-none"
                   : "bg-gray-700 text-gray-100 rounded-tl-none"
