@@ -1,0 +1,9 @@
+# *
+User-agent: *
+Allow: /
+
+# Host
+Host: https://annochat.social
+
+# Sitemaps
+Sitemap: https://annochat.social/sitemap.xml
