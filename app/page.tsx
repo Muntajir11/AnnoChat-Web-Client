@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, type FormEvent } from "react";
 import { io, type Socket } from "socket.io-client";
 import { Send, UserRound, Users, RefreshCw } from "lucide-react";
+import Image from "next/image";
 
 export default function RandomChat() {
   const [messages, setMessages] = useState<
@@ -114,7 +115,13 @@ export default function RandomChat() {
     <div className="flex flex-col h-[100dvh] bg-gray-900 text-gray-100">
       <header className="bg-gray-800 p-4 shadow-md flex justify-between items-center">
         <h1 className="text-xl font-bold text-emerald-400 flex items-center">
-          <UserRound className="mr-2" />
+          <Image
+            src="/logo.png"
+            alt="User Icon"
+            width={24}
+            height={24}
+            className="mr-2"
+          />
           AnnoChat
         </h1>
         <div className="flex items-center bg-gray-700 px-3 py-1 rounded-full text-sm">
@@ -164,7 +171,10 @@ export default function RandomChat() {
           onClick={handleFindNew}
           className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full"
         >
-          <RefreshCw className="w-5 h-5" />
+          <div className="flex items-center space-x-2">
+            <span>Find</span>
+            <RefreshCw className="w-5 h-5" />
+          </div>
         </button>
 
         <input
