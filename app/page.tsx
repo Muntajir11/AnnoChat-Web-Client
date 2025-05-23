@@ -46,7 +46,7 @@ export default function RandomChat() {
       setStatus("Matched! Say hello to your stranger.");
       setRoomId(roomId);
       setIsConnected(true);
-      // socket.emit("join room", roomId);
+      socket.emit("join room", roomId);
     });
 
     socket.on("chat message", ({ msg }) => {
