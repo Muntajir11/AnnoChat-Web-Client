@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef, type FormEvent } from "react";
 import { io, type Socket } from "socket.io-client";
 import { Send, UserRound, Users, RefreshCw } from "lucide-react";
-import Image from "next/image";
 
 export default function RandomChat() {
   const [messages, setMessages] = useState<
@@ -14,6 +13,7 @@ export default function RandomChat() {
   const [onlineUsers, setOnlineUsers] = useState(0);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [strangerTyping, setStrangerTyping] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
   const presenceRef = useRef<Socket>(
@@ -25,7 +25,6 @@ export default function RandomChat() {
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // useRef for the socket connection
   const SERVER_URL = "https://muntajir.me";
   const SOCKET_PATH = "/socket.io";
 
@@ -46,9 +45,6 @@ export default function RandomChat() {
       setStatus("Matched! Say hello to your stranger.");
       setRoomId(roomId);
       setIsConnected(true);
-      console.log(`Matched with ${partnerId} in room ${roomId}`);
-
-      // 🔥 New addition: inform server to join this room
       socket.emit("join room", roomId);
     });
 
@@ -56,8 +52,14 @@ export default function RandomChat() {
       setMessages((prev) => [...prev, { text: msg, sender: "stranger" }]);
     });
 
+    socket.on("typing", ({ senderId, isTyping }) => {
+      setStrangerTyping(isTyping);
+    });
+
     socket.on("user disconnected", () => {
       setStatus('Stranger disconnected. Press "Find" to start again.');
+      setIsConnected(false);
+      setStrangerTyping(false);
     });
   }
 
@@ -78,21 +80,18 @@ export default function RandomChat() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, strangerTyping]);
 
   useEffect(() => {
-  const input = document.querySelector("input");
-
-  const handleFocus = () => {
-    setTimeout(() => {
-      input?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 300);
-  };
-
-  input?.addEventListener("focus", handleFocus);
-  return () => input?.removeEventListener("focus", handleFocus);
-}, []);
-
+    const input = document.querySelector("input");
+    const handleFocus = () => {
+      setTimeout(() => {
+        input?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
+    };
+    input?.addEventListener("focus", handleFocus);
+    return () => input?.removeEventListener("focus", handleFocus);
+  }, []);
 
   const handleSendMessage = (e: FormEvent) => {
     e.preventDefault();
@@ -101,6 +100,7 @@ export default function RandomChat() {
     setMessages((prev) => [...prev, { text: inputValue, sender: "you" }]);
     socketRef.current!.emit("chat message", { msg: inputValue, roomId });
     setInputValue("");
+    setStrangerTyping(false);
   };
 
   const handleFindNew = () => {
@@ -108,20 +108,20 @@ export default function RandomChat() {
     setRoomId(null);
     setStatus("Searching for a match...");
     setIsConnected(false);
+    setStrangerTyping(false);
     connectSocket();
+  };
+
+  const handleTyping = (isTyping: boolean) => {
+    if (!roomId || !isConnected) return;
+    socketRef.current?.emit("typing", { roomId, isTyping });
   };
 
   return (
     <div className="flex flex-col h-[100dvh] bg-gray-900 text-gray-100">
       <header className="bg-gray-800 p-4 shadow-md flex justify-between items-center">
         <h1 className="text-xl font-bold text-emerald-400 flex items-center">
-          <Image
-            src="/logo.png"
-            alt="User Icon"
-            width={24}
-            height={24}
-            className="mr-2"
-          />
+          <UserRound className="mr-2" />
           AnnoChat
         </h1>
         <div className="flex items-center bg-gray-700 px-3 py-1 rounded-full text-sm">
@@ -156,10 +156,24 @@ export default function RandomChat() {
               }`}
             >
               {msg.text}
+              
             </div>
           </div>
         ))}
+
+
+
+        {strangerTyping && (
+  <div className="typingIndicatorContainer">
+    <div className="typingIndicatorBubble">
+      <div className="typingIndicatorBubbleDot"></div>
+      <div className="typingIndicatorBubbleDot"></div>
+      <div className="typingIndicatorBubbleDot"></div>
+    </div>
+  </div>
+)}
         <div ref={messagesEndRef} />
+        
       </div>
 
       <form
@@ -171,16 +185,17 @@ export default function RandomChat() {
           onClick={handleFindNew}
           className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full"
         >
-          <div className="flex items-center space-x-2">
-            <span>Find</span>
-            <RefreshCw className="w-5 h-5" />
-          </div>
+          <RefreshCw className="w-5 h-5" />
         </button>
 
         <input
           type="text"
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={(e) => {
+            setInputValue(e.target.value);
+            handleTyping(true);
+            setTimeout(() => handleTyping(false), 1000); // Typing debounce
+          }}
           placeholder="Type a message…"
           disabled={!isConnected}
           className="flex-1 bg-gray-700 text-gray-100 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
