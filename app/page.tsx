@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, type FormEvent } from "react";
 import { io, type Socket } from "socket.io-client";
-import { Send, UserRound, Users, RefreshCw } from "lucide-react";
+import { Send, Users, RefreshCw } from "lucide-react";
 import Image from "next/image";
 
 export default function RandomChat() {
@@ -27,23 +27,37 @@ export default function RandomChat() {
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const SERVER_URL = "https://muntajir.me";
+  const SERVER_URL = "https://muntajir.me"; 
   const SOCKET_PATH = "/socket.io";
 
-  function connectSocket() {
+  async function connectSocket() {
     if (socketRef.current) {
       socketRef.current.removeAllListeners();
       socketRef.current.disconnect();
+    }
+
+    let token = "";
+    try {
+      const res = await fetch("/api/get-socket-token");
+
+      const data = await res.json();
+      token = data.token;
+    } catch (err) {
+      console.error("Failed to fetch token:", err);
+      setStatus("Error: Could not get auth token");
+      return;
     }
 
     const socket = io(SERVER_URL, {
       path: SOCKET_PATH,
       transports: ["websocket"],
       secure: true,
+      auth: { token },
     });
+
     socketRef.current = socket;
 
-    socket.on("matched", ({ roomId, partnerId }) => {
+    socket.on("matched", ({ roomId }) => {
       setStatus("Matched! Say hello to your stranger.");
       setRoomId(roomId);
       setIsConnected(true);
@@ -54,7 +68,7 @@ export default function RandomChat() {
       setMessages((prev) => [...prev, { text: msg, sender: "stranger" }]);
     });
 
-    socket.on("typing", ({ senderId, isTyping }) => {
+    socket.on("typing", ({ isTyping }) => {
       setStrangerTyping(isTyping);
     });
 
@@ -63,15 +77,21 @@ export default function RandomChat() {
       setIsConnected(false);
       setStrangerTyping(false);
     });
+
+    socket.on("error", (err) => {
+      if (err && typeof err === "object" && "message" in err) {
+        setStatus(`Error: ${(err as any).message}`);
+        socket.disconnect();
+        setIsConnected(false);
+      }
+    });
   }
 
   useEffect(() => {
     const pres = presenceRef.current;
     pres.connect();
     pres.on("onlineUsers", setOnlineUsers);
-
     connectSocket();
-
     return () => {
       socketRef.current?.removeAllListeners();
       socketRef.current?.disconnect();
@@ -84,6 +104,7 @@ export default function RandomChat() {
     const timeout = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, 100);
+    return () => clearTimeout(timeout);
   }, [messages, strangerTyping]);
 
   useEffect(() => {
@@ -100,7 +121,6 @@ export default function RandomChat() {
   const handleSendMessage = (e: FormEvent) => {
     e.preventDefault();
     if (!isConnected || !inputValue.trim() || !roomId) return;
-
     setMessages((prev) => [...prev, { text: inputValue, sender: "you" }]);
     socketRef.current!.emit("chat message", { msg: inputValue, roomId });
     setInputValue("");
@@ -126,13 +146,7 @@ export default function RandomChat() {
     <div className="flex flex-col h-[100dvh] bg-gray-900 text-gray-100">
       <header className="bg-gray-800 p-4 shadow-md flex justify-between items-center">
         <h1 className="text-xl font-bold text-emerald-400 flex items-center">
-          <Image
-            src="/logo.png"
-            alt="User Icon"
-            width={24}
-            height={24}
-            className="mr-2"
-          />
+          <Image src="/logo.png" alt="User Icon" width={24} height={24} className="mr-2" />
           AnnoChat
         </h1>
         <div className="flex items-center bg-gray-700 px-3 py-1 rounded-full text-sm">
@@ -142,23 +156,14 @@ export default function RandomChat() {
       </header>
 
       <div className="bg-gray-800/50 p-3 text-center border-b border-gray-700">
-        <p
-          className={`text-sm font-medium ${
-            status.includes("Matched") ? "text-emerald-400" : "text-amber-400"
-          }`}
-        >
+        <p className={`text-sm font-medium ${status.includes("Matched") ? "text-emerald-400" : "text-amber-400"}`}>
           {status}
         </p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3 messagesContainer">
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex ${
-              msg.sender === "you" ? "justify-end" : "justify-start"
-            }`}
-          >
+          <div key={i} className={`flex ${msg.sender === "you" ? "justify-end" : "justify-start"}`}>
             <div
               className={`px-4 py-2 rounded-2xl break-words whitespace-pre-wrap max-w-xs sm:max-w-md md:max-w-lg lg:max-w-xl overflow-auto ${
                 msg.sender === "you"
@@ -205,9 +210,7 @@ export default function RandomChat() {
             setInputValue(e.target.value);
             handleTyping(true);
 
-            if (typingTimeoutRef.current) {
-              clearTimeout(typingTimeoutRef.current);
-            }
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
 
             typingTimeoutRef.current = setTimeout(() => {
               handleTyping(false);
