@@ -15,6 +15,7 @@ export default function RandomChat() {
   const [roomId, setRoomId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [strangerTyping, setStrangerTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const presenceRef = useRef<Socket>(
@@ -80,7 +81,9 @@ export default function RandomChat() {
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const timeout = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 100);
   }, [messages, strangerTyping]);
 
   useEffect(() => {
@@ -102,6 +105,7 @@ export default function RandomChat() {
     socketRef.current!.emit("chat message", { msg: inputValue, roomId });
     setInputValue("");
     setStrangerTyping(false);
+    handleTyping(false);
   };
 
   const handleFindNew = () => {
@@ -147,7 +151,7 @@ export default function RandomChat() {
         </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 messagesContainer">
         {messages.map((msg, i) => (
           <div
             key={i}
@@ -183,7 +187,7 @@ export default function RandomChat() {
         onSubmit={handleSendMessage}
         className="bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2"
       >
-                <button
+        <button
           type="button"
           onClick={handleFindNew}
           className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full"
@@ -194,14 +198,20 @@ export default function RandomChat() {
           </div>
         </button>
 
-
         <input
           type="text"
           value={inputValue}
           onChange={(e) => {
             setInputValue(e.target.value);
             handleTyping(true);
-            setTimeout(() => handleTyping(false), 1000); // Typing debounce
+
+            if (typingTimeoutRef.current) {
+              clearTimeout(typingTimeoutRef.current);
+            }
+
+            typingTimeoutRef.current = setTimeout(() => {
+              handleTyping(false);
+            }, 1500);
           }}
           placeholder="Type a message…"
           disabled={!isConnected}
