@@ -39,7 +39,6 @@ export default function RandomChat() {
     let token = "";
     try {
       const res = await fetch("/api/get-socket-token");
-
       const data = await res.json();
       token = data.token;
     } catch (err) {
@@ -176,15 +175,13 @@ export default function RandomChat() {
           </div>
         ))}
 
+        {/* — replaced animated dots with simple text indicator — */}
         {strangerTyping && (
-          <div className="typingIndicatorContainer">
-            <div className="typingIndicatorBubble">
-              <div className="typingIndicatorBubbleDot"></div>
-              <div className="typingIndicatorBubbleDot"></div>
-              <div className="typingIndicatorBubbleDot"></div>
-            </div>
+          <div className="ml-4 mb-2">
+            <span className="text-gray-400 italic">Stranger is typing…</span>
           </div>
         )}
+
         <div ref={messagesEndRef} />
       </div>
 
