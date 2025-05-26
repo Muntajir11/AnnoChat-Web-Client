@@ -27,7 +27,7 @@ export default function RandomChat() {
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const SERVER_URL = "https://muntajir.me"; 
+  const SERVER_URL = "https://muntajir.me";
   const SOCKET_PATH = "/socket.io";
 
   async function connectSocket() {
@@ -75,6 +75,7 @@ export default function RandomChat() {
       setStatus('Stranger disconnected. Press "Find" to start again.');
       setIsConnected(false);
       setStrangerTyping(false);
+  
     });
 
     socket.on("error", (err) => {
@@ -86,11 +87,54 @@ export default function RandomChat() {
     });
   }
 
+ 
+  function leaveRoom() {
+    if (socketRef.current && roomId) {
+      socketRef.current.emit("leave room");
+    }
+    setIsConnected(false);
+    setStatus("You left the chat. Press \"Find\" to start again.");
+    setRoomId(null);
+    setMessages([]);
+    setStrangerTyping(false);
+  }
+
+
+  const handleFindNew = () => {
+    if (isConnected && roomId) {
+      leaveRoom();
+      // console.log("Leaving current room:", roomId);
+      
+    }
+
+      setRoomId(null);            
+      setMessages([]);  
+
+    setStatus("Searching for a match...");
+    connectSocket();
+  };
+
+  const handleSendMessage = (e: FormEvent) => {
+    e.preventDefault();
+    if (!isConnected || !inputValue.trim() || !roomId) return;
+    setMessages((prev) => [...prev, { text: inputValue, sender: "you" }]);
+    socketRef.current!.emit("chat message", { msg: inputValue, roomId });
+    setInputValue("");
+    setStrangerTyping(false);
+    handleTyping(false);
+  };
+
+  const handleTyping = (isTyping: boolean) => {
+    if (!roomId || !isConnected) return;
+    socketRef.current?.emit("typing", { roomId, isTyping });
+  };
+
   useEffect(() => {
     const pres = presenceRef.current;
     pres.connect();
     pres.on("onlineUsers", setOnlineUsers);
     connectSocket();
+
     return () => {
       socketRef.current?.removeAllListeners();
       socketRef.current?.disconnect();
@@ -116,30 +160,6 @@ export default function RandomChat() {
     input?.addEventListener("focus", handleFocus);
     return () => input?.removeEventListener("focus", handleFocus);
   }, []);
-
-  const handleSendMessage = (e: FormEvent) => {
-    e.preventDefault();
-    if (!isConnected || !inputValue.trim() || !roomId) return;
-    setMessages((prev) => [...prev, { text: inputValue, sender: "you" }]);
-    socketRef.current!.emit("chat message", { msg: inputValue, roomId });
-    setInputValue("");
-    setStrangerTyping(false);
-    handleTyping(false);
-  };
-
-  const handleFindNew = () => {
-    setMessages([]);
-    setRoomId(null);
-    setStatus("Searching for a match...");
-    setIsConnected(false);
-    setStrangerTyping(false);
-    connectSocket();
-  };
-
-  const handleTyping = (isTyping: boolean) => {
-    if (!roomId || !isConnected) return;
-    socketRef.current?.emit("typing", { roomId, isTyping });
-  };
 
   return (
     <div className="flex flex-col h-[100dvh] bg-gray-900 text-gray-100">
@@ -175,7 +195,6 @@ export default function RandomChat() {
           </div>
         ))}
 
-        {/* — replaced animated dots with simple text indicator — */}
         {strangerTyping && (
           <div className="ml-4 mb-2">
             <span className="text-gray-400 italic">Stranger is typing…</span>
