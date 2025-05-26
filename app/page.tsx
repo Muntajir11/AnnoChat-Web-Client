@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, type FormEvent } from "react";
 import { io, type Socket } from "socket.io-client";
-import { Send, Users, RefreshCw } from "lucide-react";
+import { Send, Users, RefreshCw, XCircle } from "lucide-react";
 import Image from "next/image";
 
 export default function RandomChat() {
@@ -14,9 +14,10 @@ export default function RandomChat() {
   const [onlineUsers, setOnlineUsers] = useState(0);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [strangerTyping, setStrangerTyping] = useState(false);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const presenceRef = useRef<Socket>(
     io(`https://muntajir.me/presence`, {
@@ -31,9 +32,12 @@ export default function RandomChat() {
   const SOCKET_PATH = "/socket.io";
 
   async function connectSocket() {
+    // if (socketRef.current && socketRef.current.connected) return;
+
     if (socketRef.current) {
       socketRef.current.removeAllListeners();
       socketRef.current.disconnect();
+      socketRef.current = null;
     }
 
     let token = "";
@@ -44,6 +48,7 @@ export default function RandomChat() {
     } catch (err) {
       console.error("Failed to fetch token:", err);
       setStatus("Error: Could not get auth token");
+      setIsSearching(false);
       return;
     }
 
@@ -60,6 +65,7 @@ export default function RandomChat() {
       setStatus("Matched! Say hello to your stranger.");
       setRoomId(roomId);
       setIsConnected(true);
+      setIsSearching(false);
       socket.emit("join room", roomId);
     });
 
@@ -74,8 +80,9 @@ export default function RandomChat() {
     socket.on("user disconnected", () => {
       setStatus('Stranger disconnected. Press "Find" to start again.');
       setIsConnected(false);
+      setIsSearching(false);
       setStrangerTyping(false);
-  
+      setRoomId(null);
     });
 
     socket.on("error", (err) => {
@@ -83,45 +90,49 @@ export default function RandomChat() {
         setStatus(`Error: ${(err as any).message}`);
         socket.disconnect();
         setIsConnected(false);
+        setIsSearching(false);
       }
     });
+
+    socket.connect();
   }
 
- 
   function leaveRoom() {
     if (socketRef.current && roomId) {
-      socketRef.current.emit("leave room");
+      socketRef.current.emit("leave room", { roomId });
+      socketRef.current.disconnect();
     }
     setIsConnected(false);
-    setStatus("You left the chat. Press \"Find\" to start again.");
+    setIsSearching(false);
+    setStatus('You left the chat. Press "Find" to start again.');
     setRoomId(null);
     setMessages([]);
     setStrangerTyping(false);
   }
 
-
   const handleFindNew = () => {
-    if (isConnected && roomId) {
-      leaveRoom();
-      // console.log("Leaving current room:", roomId);
-      
-    }
-
-      setRoomId(null);            
-      setMessages([]);  
-
+    // if (isSearching || isConnected) return;
+    setRoomId(null);
+    setMessages([]);
     setStatus("Searching for a match...");
+    setIsSearching(true);
     connectSocket();
   };
 
   const handleSendMessage = (e: FormEvent) => {
     e.preventDefault();
     if (!isConnected || !inputValue.trim() || !roomId) return;
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = null;
+    }
+    socketRef.current?.emit("typing", { roomId, isTyping: false });
+
     setMessages((prev) => [...prev, { text: inputValue, sender: "you" }]);
     socketRef.current!.emit("chat message", { msg: inputValue, roomId });
     setInputValue("");
     setStrangerTyping(false);
-    handleTyping(false);
   };
 
   const handleTyping = (isTyping: boolean) => {
@@ -133,11 +144,8 @@ export default function RandomChat() {
     const pres = presenceRef.current;
     pres.connect();
     pres.on("onlineUsers", setOnlineUsers);
-    connectSocket();
 
     return () => {
-      socketRef.current?.removeAllListeners();
-      socketRef.current?.disconnect();
       pres.off("onlineUsers", setOnlineUsers);
       pres.disconnect();
     };
@@ -165,7 +173,13 @@ export default function RandomChat() {
     <div className="flex flex-col h-[100dvh] bg-gray-900 text-gray-100">
       <header className="bg-gray-800 p-4 shadow-md flex justify-between items-center">
         <h1 className="text-xl font-bold text-emerald-400 flex items-center">
-          <Image src="/logo.png" alt="User Icon" width={24} height={24} className="mr-2" />
+          <Image
+            src="/logo.png"
+            alt="User Icon"
+            width={24}
+            height={24}
+            className="mr-2"
+          />
           AnnoChat
         </h1>
         <div className="flex items-center bg-gray-700 px-3 py-1 rounded-full text-sm">
@@ -175,14 +189,23 @@ export default function RandomChat() {
       </header>
 
       <div className="bg-gray-800/50 p-3 text-center border-b border-gray-700">
-        <p className={`text-sm font-medium ${status.includes("Matched") ? "text-emerald-400" : "text-amber-400"}`}>
+        <p
+          className={`text-sm font-medium ${
+            status.includes("Matched") ? "text-emerald-400" : "text-amber-400"
+          }`}
+        >
           {status}
         </p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3 messagesContainer">
         {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.sender === "you" ? "justify-end" : "justify-start"}`}>
+          <div
+            key={i}
+            className={`flex ${
+              msg.sender === "you" ? "justify-end" : "justify-start"
+            }`}
+          >
             <div
               className={`px-4 py-2 rounded-2xl break-words whitespace-pre-wrap max-w-xs sm:max-w-md md:max-w-lg lg:max-w-xl overflow-auto ${
                 msg.sender === "you"
@@ -208,26 +231,39 @@ export default function RandomChat() {
         onSubmit={handleSendMessage}
         className="bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2"
       >
+        {/* Find Button */}
         <button
           type="button"
           onClick={handleFindNew}
-          className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full"
+          disabled={isSearching || isConnected}
+          className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
         >
-          <div className="flex items-center space-x-2">
-            <span>Find</span>
-            <RefreshCw className="w-5 h-5" />
-          </div>
+          <span>{isSearching ? "Searching..." : "Find"}</span>
+          <RefreshCw className={`w-5 h-5 ${isSearching ? "animate-spin" : ""}`} />
         </button>
 
+        {/* Leave Button */}
+        {isConnected && (
+          <button
+            type="button"
+            onClick={leaveRoom}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-full flex items-center space-x-2"
+          >
+            <XCircle className="w-5 h-5" />
+            <span>Leave</span>
+          </button>
+        )}
+
+        {/* Input */}
         <input
           type="text"
           value={inputValue}
           onChange={(e) => {
             setInputValue(e.target.value);
             handleTyping(true);
-
-            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-
+            if (typingTimeoutRef.current) {
+              clearTimeout(typingTimeoutRef.current);
+            }
             typingTimeoutRef.current = setTimeout(() => {
               handleTyping(false);
             }, 1500);
@@ -237,6 +273,7 @@ export default function RandomChat() {
           className="flex-1 bg-gray-700 text-gray-100 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
 
+        {/* Send Button */}
         <button
           type="submit"
           disabled={!isConnected || !inputValue.trim()}
