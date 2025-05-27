@@ -86,6 +86,10 @@ export default function RandomChat() {
     });
 
     socket.on("error", (err) => {
+       console.error("‹‹ SOCKET ERROR ››", err);
+       console.log("Error getting triggered");
+       
+
       if (err && typeof err === "object" && "message" in err) {
         setStatus(`Error: ${(err as any).message}`);
         socket.disconnect();
