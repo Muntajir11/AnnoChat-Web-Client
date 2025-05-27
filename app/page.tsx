@@ -32,8 +32,7 @@ export default function RandomChat() {
   const SOCKET_PATH = "/socket.io";
 
   async function connectSocket() {
-    // if (socketRef.current && socketRef.current.connected) return;
-
+    // Tear down any existing socket
     if (socketRef.current) {
       socketRef.current.removeAllListeners();
       socketRef.current.disconnect();
@@ -58,7 +57,6 @@ export default function RandomChat() {
       secure: true,
       auth: { token },
     });
-
     socketRef.current = socket;
 
     socket.on("matched", ({ roomId }) => {
@@ -86,26 +84,28 @@ export default function RandomChat() {
     });
 
     socket.on("error", (err) => {
-       console.error("‹‹ SOCKET ERROR ››", err);
-       console.log("Error getting triggered");
-       
-
-      if (err && typeof err === "object" && "message" in err) {
-        setStatus(`Error: ${(err as any).message}`);
+      console.error("‹‹ SOCKET ERROR ››", err);
+      // Only disconnect on auth failure
+      if (err && typeof err === "object" && err.message === "Authentication failed") {
+        setStatus("Authentication failed. Please log in again.");
         socket.disconnect();
         setIsConnected(false);
         setIsSearching(false);
+      } else {
+        setStatus(`Error: ${(err as any).message}`);
       }
     });
 
     socket.connect();
   }
 
-  function leaveRoom() {
+  async function leaveRoom() {
     if (socketRef.current && roomId) {
       socketRef.current.emit("leave room", { roomId });
       socketRef.current.disconnect();
+      socketRef.current = null;
     }
+    // reset UI state
     setIsConnected(false);
     setIsSearching(false);
     setStatus('You left the chat. Press "Find" to start again.');
@@ -114,13 +114,15 @@ export default function RandomChat() {
     setStrangerTyping(false);
   }
 
-  const handleFindNew = () => {
-    // if (isSearching || isConnected) return;
-    setRoomId(null);
-    setMessages([]);
+  const handleFindNew = async () => {
+    // If we're mid-chat, leave it cleanly first
+    if (isConnected) {
+      await leaveRoom();
+    }
+    // then start a fresh search
     setStatus("Searching for a match...");
     setIsSearching(true);
-    connectSocket();
+    await connectSocket();
   };
 
   const handleSendMessage = (e: FormEvent) => {
@@ -148,7 +150,6 @@ export default function RandomChat() {
     const pres = presenceRef.current;
     pres.connect();
     pres.on("onlineUsers", setOnlineUsers);
-
     return () => {
       pres.off("onlineUsers", setOnlineUsers);
       pres.disconnect();
@@ -156,10 +157,10 @@ export default function RandomChat() {
   }, []);
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
+    const t = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, 100);
-    return () => clearTimeout(timeout);
+    return () => clearTimeout(t);
   }, [messages, strangerTyping]);
 
   useEffect(() => {
@@ -235,7 +236,6 @@ export default function RandomChat() {
         onSubmit={handleSendMessage}
         className="bg-gray-800 p-3 border-t border-gray-700 flex items-center gap-2"
       >
-        {/* Find Button */}
         <button
           type="button"
           onClick={handleFindNew}
@@ -246,7 +246,6 @@ export default function RandomChat() {
           <RefreshCw className={`w-5 h-5 ${isSearching ? "animate-spin" : ""}`} />
         </button>
 
-        {/* Leave Button */}
         {isConnected && (
           <button
             type="button"
@@ -258,26 +257,20 @@ export default function RandomChat() {
           </button>
         )}
 
-        {/* Input */}
         <input
           type="text"
           value={inputValue}
           onChange={(e) => {
             setInputValue(e.target.value);
             handleTyping(true);
-            if (typingTimeoutRef.current) {
-              clearTimeout(typingTimeoutRef.current);
-            }
-            typingTimeoutRef.current = setTimeout(() => {
-              handleTyping(false);
-            }, 1500);
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = setTimeout(() => handleTyping(false), 1500);
           }}
           placeholder="Type a message…"
           disabled={!isConnected}
           className="flex-1 bg-gray-700 text-gray-100 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
 
-        {/* Send Button */}
         <button
           type="submit"
           disabled={!isConnected || !inputValue.trim()}
