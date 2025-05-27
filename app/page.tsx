@@ -102,7 +102,7 @@ export default function RandomChat() {
   async function leaveRoom() {
     if (socketRef.current && roomId) {
       socketRef.current.emit("leave room", { roomId });
-      socketRef.current.disconnect();
+      // socketRef.current.disconnect();
       socketRef.current = null;
     }
     // reset UI state
