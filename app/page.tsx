@@ -77,6 +77,7 @@ export default function RandomChat() {
 
     socket.on("user disconnected", () => {
       socket.disconnect();
+      
       setStatus('Stranger disconnected. Press "Find" to start again.');
       // setIsConnected(false);
       setIsSearching(false);
@@ -104,9 +105,9 @@ export default function RandomChat() {
   const leaveRoom = () => {
     const chat = socketRef.current;
     if (chat && roomId) chat.emit('leave room', { roomId });
-    // if (chat && chat.connected) {
-    //   chat.disconnect();
-    // }
+    if (chat && chat.connected) {
+      chat.disconnect();
+    }
 
     setIsConnected(false);
     setStatus("You have left the chat. Press 'Find' to start again.");
