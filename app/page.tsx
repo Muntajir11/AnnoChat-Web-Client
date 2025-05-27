@@ -100,40 +100,30 @@ export default function RandomChat() {
   }
 
   async function leaveRoom() {
-  if (socketRef.current && roomId) {
-    // Emit the leave room event, but DO NOT disconnect the socket
-    socketRef.current.emit("leave room", roomId);
+    if (socketRef.current && roomId) {
+      socketRef.current.emit("leave room", { roomId });
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+    // reset UI state
+    setIsConnected(false);
+    setIsSearching(false);
     setStatus('You left the chat. Press "Find" to start again.');
+    setRoomId(null);
+    setMessages([]);
+    setStrangerTyping(false);
   }
 
-  // Reset UI and app state
-  setIsConnected(false);
-  setIsSearching(false);
-  setRoomId(null);
-  setMessages([]);
-  setStrangerTyping(false);
-}
-
-  const handleFindNew = () => {
-  // If already searching or connected, do nothing
-  if (isSearching || isConnected) return;
-
-  // Reset previous state (if any)
-  setRoomId(null);
-  setMessages([]);
-  setStatus("Searching for a match...");
-  setIsSearching(true);
-
-  // Leave the room (without disconnecting the socket) if already in one
-  if (socketRef.current && socketRef.current.connected) {
-    leaveRoom();
-  }
-
-  // Connect the socket if it's not already connected
-  if (!socketRef.current || !socketRef.current.connected) {
-    connectSocket();
-  }
-};
+  const handleFindNew = async () => {
+    // If we're mid-chat, leave it cleanly first
+    if (isConnected) {
+      await leaveRoom();
+    }
+    // then start a fresh search
+    setStatus("Searching for a match...");
+    setIsSearching(true);
+    await connectSocket();
+  };
 
   const handleSendMessage = (e: FormEvent) => {
     e.preventDefault();
