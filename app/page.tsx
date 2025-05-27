@@ -76,8 +76,9 @@ export default function RandomChat() {
     });
 
     socket.on("user disconnected", () => {
+      socket.disconnect();
       setStatus('Stranger disconnected. Press "Find" to start again.');
-      setIsConnected(false);
+      // setIsConnected(false);
       setIsSearching(false);
       setStrangerTyping(false);
       setRoomId(null);
@@ -99,30 +100,29 @@ export default function RandomChat() {
     socket.connect();
   }
 
-  async function leaveRoom() {
-    if (socketRef.current && roomId) {
-      socketRef.current.emit("leave room", { roomId });
-      // socketRef.current.disconnect();
-      socketRef.current = null;
-    }
-    // reset UI state
+
+  const leaveRoom = () => {
+    const chat = socketRef.current;
+    if (chat && roomId) chat.emit('leave room', { roomId });
+    // if (chat && chat.connected) {
+    //   chat.disconnect();
+    // }
+
     setIsConnected(false);
-    setIsSearching(false);
-    setStatus('You left the chat. Press "Find" to start again.');
+    setStatus("You have left the chat. Press 'Find' to start again.");
     setRoomId(null);
     setMessages([]);
     setStrangerTyping(false);
-  }
+  };
 
-  const handleFindNew = async () => {
-    // If we're mid-chat, leave it cleanly first
-    if (isConnected) {
-      await leaveRoom();
-    }
-    // then start a fresh search
-    setStatus("Searching for a match...");
+  const handleFindChat = () => {
+    // if (isConnected && roomId) leaveRoom();
+    setRoomId(null);
+    setMessages([]);
+    setStatus('Searching for a match...');
     setIsSearching(true);
-    await connectSocket();
+    
+    connectSocket();
   };
 
   const handleSendMessage = (e: FormEvent) => {
@@ -238,7 +238,7 @@ export default function RandomChat() {
       >
         <button
           type="button"
-          onClick={handleFindNew}
+          onClick={handleFindChat}
           disabled={isSearching || isConnected}
           className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
         >
