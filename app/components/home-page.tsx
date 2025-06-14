@@ -31,7 +31,7 @@ export default function HomePage() {
 
   const handlePlayStoreClick = () => {
     // Replace with your actual Play Store URL
-    window.open("https://play.google.com/store/apps/details?id=com.annochat.app", "_blank")
+    window.open("https://play.google.com/store/apps/details?id=com.annochat", "_blank")
   }
 
   if (startChat) {
