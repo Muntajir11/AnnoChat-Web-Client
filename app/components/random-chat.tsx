@@ -19,9 +19,8 @@ export default function RandomChat({ onBack }: { onBack?: () => void }) {
   const presenceConnectingRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const authTokenFetchedRef = useRef(false)
-
-  const PRESENCE_URL = "ws://localhost:5000/presence"
-  const CHAT_URL = authToken ? `ws://localhost:5000/?token=${authToken}` : null
+  const PRESENCE_URL = "wss://muntajir.me/presence"
+  const CHAT_URL = authToken ? `wss://muntajir.me/?token=${authToken}` : null
 
     useEffect(() => {
     async function fetchAuthToken() {
