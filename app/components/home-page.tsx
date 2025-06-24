@@ -8,11 +8,25 @@ export default function HomePage() {
   const [startChat, setStartChat] = useState(false)
   const [showRules, setShowRules] = useState(false)
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+  const [floatingElements, setFloatingElements] = useState<Array<{
+    left: string;
+    top: string;
+    animation: string;
+    animationDelay: string;
+  }>>([]);
 
   useEffect(() => {
-    // Override global overflow hidden when homepage is mounted
     document.body.style.overflow = "auto"
     document.documentElement.style.overflow = "auto"
+
+
+    const elements = [...Array(15)].map(() => ({
+      left: `${Math.random() * 100}%`,
+      top: `${Math.random() * 100}%`,
+      animation: `float ${4 + Math.random() * 6}s ease-in-out infinite`,
+      animationDelay: `${Math.random() * 3}s`,
+    }))
+    setFloatingElements(elements)
 
     // Mouse tracking for interactive effects
     const handleMouseMove = (e: MouseEvent) => {
@@ -21,7 +35,7 @@ export default function HomePage() {
 
     window.addEventListener("mousemove", handleMouseMove)
 
-    // Cleanup function to restore original styles when component unmounts
+  
     return () => {
       document.body.style.overflow = "hidden"
       document.documentElement.style.overflow = "hidden"
@@ -71,15 +85,15 @@ export default function HomePage() {
 
       {/* Floating Geometric Shapes */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[...Array(15)].map((_, i) => (
+        {floatingElements.map((element, i) => (
           <div
             key={i}
             className="absolute opacity-10"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animation: `float ${4 + Math.random() * 6}s ease-in-out infinite`,
-              animationDelay: `${Math.random() * 3}s`,
+              left: element.left,
+              top: element.top,
+              animation: element.animation,
+              animationDelay: element.animationDelay,
             }}
           >
             {i % 3 === 0 ? (

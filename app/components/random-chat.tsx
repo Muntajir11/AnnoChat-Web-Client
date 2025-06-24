@@ -1,106 +1,194 @@
 "use client"
 
 import { useEffect, useState, useRef, type FormEvent } from "react"
-import { io, type Socket } from "socket.io-client"
 import { Send, Users, RefreshCw, XCircle, ArrowLeft } from "lucide-react"
 
 export default function RandomChat({ onBack }: { onBack?: () => void }) {
   const [messages, setMessages] = useState<{ text: string; sender: "you" | "stranger" }[]>([])
   const [inputValue, setInputValue] = useState("")
-  const [status, setStatus] = useState('Press "Find" to start chatting')
+  const [status, setStatus] = useState('Loading...')
   const [onlineUsers, setOnlineUsers] = useState(0)
   const [roomId, setRoomId] = useState<string | null>(null)
   const [isConnected, setIsConnected] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
   const [strangerTyping, setStrangerTyping] = useState(false)
-
+  const [authToken, setAuthToken] = useState<string | null>(null)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const socketRef = useRef<Socket | null>(null)
-  const presenceRef = useRef<Socket>(
-    io(`https://muntajir.me/presence`, {
-      autoConnect: false,
-      transports: ["websocket"],
-      secure: true,
-    }),
-  )
+  const chatWsRef = useRef<WebSocket | null>(null)
+  const presenceWsRef = useRef<WebSocket | null>(null)
+  const presenceConnectingRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const authTokenFetchedRef = useRef(false)
 
-  const SERVER_URL = "https://muntajir.me"
-  const SOCKET_PATH = "/socket.io"
+  const PRESENCE_URL = "ws://localhost:5000/presence"
+  const CHAT_URL = authToken ? `ws://localhost:5000/?token=${authToken}` : null
 
-  async function connectSocket() {
-    // Tear down any existing socket
-    if (socketRef.current) {
-      socketRef.current.removeAllListeners()
-      socketRef.current.disconnect()
-      socketRef.current = null
+    useEffect(() => {
+    async function fetchAuthToken() {
+      if (authTokenFetchedRef.current) return 
+      
+      authTokenFetchedRef.current = true
+      try {
+        const response = await fetch('/api/get-socket-token')
+        const data = await response.json()
+        setAuthToken(data.token)
+        setStatus('Press "Find" to start chatting')
+      } catch (error) {
+        console.error('Failed to fetch auth token:', error)
+        setStatus('Failed to load. Please refresh the page.')
+        authTokenFetchedRef.current = false 
+      }
     }
 
-    let token = ""
-    try {
-      const res = await fetch("/api/get-socket-token")
-      const data = await res.json()
-      token = data.token
-    } catch (err) {
-      console.error("Failed to fetch token:", err)
-      setStatus("Error: Could not get auth token")
-      setIsSearching(false)
+    fetchAuthToken()
+  }, [])
+
+
+  useEffect(() => {
+    if (authToken) {
+      connectPresence()
+    }
+
+    return () => {
+      if (presenceWsRef.current) {
+        presenceWsRef.current.close()
+      }
+      if (chatWsRef.current) {
+        chatWsRef.current.close()
+      }
+    }
+  }, [authToken])
+
+  function connectPresence() {
+    if (presenceConnectingRef.current || 
+        (presenceWsRef.current && 
+         (presenceWsRef.current.readyState === WebSocket.CONNECTING || 
+          presenceWsRef.current.readyState === WebSocket.OPEN))) {
       return
     }
-
-    const socket = io(SERVER_URL, {
-      path: SOCKET_PATH,
-      transports: ["websocket"],
-      secure: true,
-      auth: { token },
-    })
-    socketRef.current = socket
-
-    socket.on("matched", ({ roomId }) => {
-      setStatus("Matched! Say hello to your stranger.")
-      setRoomId(roomId)
-      setIsConnected(true)
-      setIsSearching(false)
-      socket.emit("join room", roomId)
-    })
-
-    socket.on("chat message", ({ msg }) => {
-      setMessages((prev) => [...prev, { text: msg, sender: "stranger" }])
-    })
-
-    socket.on("typing", ({ isTyping }) => {
-      setStrangerTyping(isTyping)
-    })
-
-    socket.on("user disconnected", () => {
-      socket.disconnect()
-
-      setStatus('Stranger disconnected. Press "Find" to start again.')
-      setIsSearching(false)
-      setStrangerTyping(false)
-      setRoomId(null)
-    })
-
-    socket.on("error", (err) => {
-      console.error("‹‹ SOCKET ERROR ››", err)
-      if (err && typeof err === "object" && err.message === "Authentication failed") {
-        setStatus("Authentication failed. Please log in again.")
-        socket.disconnect()
-        setIsConnected(false)
-        setIsSearching(false)
-      } else {
-        setStatus(`Error: ${(err as any).message}`)
+    
+    presenceConnectingRef.current = true
+    const presenceWs = new WebSocket(PRESENCE_URL)
+    presenceWsRef.current = presenceWs
+    
+    presenceWs.onopen = () => {
+      presenceConnectingRef.current = false
+    }
+    
+    presenceWs.onmessage = (e) => {
+      const { event, data } = JSON.parse(e.data)
+      if (event === 'onlineUsers') {
+        setOnlineUsers(data)
       }
-    })
-
-    socket.connect()
+    }
+    
+    presenceWs.onerror = (error) => {
+      console.error('Presence WebSocket error:', error)
+      presenceConnectingRef.current = false
+    }
+    
+    presenceWs.onclose = (event) => {
+      presenceConnectingRef.current = false
+      
+   
+      if (event.code !== 1000 && presenceWsRef.current === presenceWs) {
+        setTimeout(() => {
+       
+          if (presenceWsRef.current === presenceWs || !presenceWsRef.current) {
+            connectPresence()
+          }
+        }, 3000)
+      }
+    }
   }
+  async function connectSocket() {
+    if (!CHAT_URL) {
+      console.error('No auth token available')
+      return
+    }
+    
+    if (chatWsRef.current) {
+      chatWsRef.current.close()
+      chatWsRef.current = null
+    }
 
+    const chatWs = new WebSocket(CHAT_URL)
+    chatWsRef.current = chatWs
+
+    chatWs.onopen = () => {
+      
+    }
+
+    chatWs.onmessage = (e) => {
+      const { event, data } = JSON.parse(e.data)
+      
+      switch (event) {
+        case 'matched':
+          setStatus("Matched! Say hello to your stranger.")
+          setRoomId(data.roomId)
+          setIsConnected(true)
+          setIsSearching(false)
+       
+          chatWs.send(JSON.stringify({ event: 'join room', data: data.roomId }))
+          break
+          
+        case 'joined':
+          break
+          
+        case 'chat message':
+          if (data.senderId !== 'self') { 
+            setMessages((prev) => [...prev, { text: data.msg, sender: "stranger" }])
+          }
+          break
+          
+        case 'typing':
+          if (data.senderId !== 'self') { 
+            setStrangerTyping(data.isTyping)
+          }
+          break
+          
+        case 'user disconnected':
+          chatWs.close()
+          setStatus('Stranger disconnected. Press "Find" to start again.')
+          setIsSearching(false)
+          setStrangerTyping(false)
+          setRoomId(null)
+          setIsConnected(false)
+          break
+          
+        case 'error':
+          console.error('‹‹ SOCKET ERROR ››', data)
+          if (data && data.message === 'Auth failed') {
+            setStatus("Authentication failed. Please try again.")
+            chatWs.close()
+            setIsConnected(false)
+            setIsSearching(false)
+          } else {
+            setStatus(`Error: ${data.message}`)
+          }
+          break
+      }
+    }
+
+    chatWs.onerror = (error) => {
+      console.error('Chat WebSocket error:', error)
+      setStatus("Connection error. Please try again.")
+      setIsSearching(false)
+    }
+
+    chatWs.onclose = (event) => {
+      if (isConnected) {
+        setIsConnected(false)
+      }
+    }
+  }
   const leaveRoom = () => {
-    const chat = socketRef.current
-    if (chat && roomId) chat.emit("leave room", { roomId })
-    if (chat && chat.connected) {
-      chat.disconnect()
+    const chat = chatWsRef.current
+    if (chat && chat.readyState === WebSocket.OPEN && roomId) {
+      chat.send(JSON.stringify({ event: "leave room" }))
+    }
+    if (chat) {
+      chat.close()
     }
 
     setIsConnected(false)
@@ -109,8 +197,12 @@ export default function RandomChat({ onBack }: { onBack?: () => void }) {
     setMessages([])
     setStrangerTyping(false)
   }
-
   const handleFindChat = () => {
+    if (!authToken) {
+      setStatus("Loading authentication...")
+      return
+    }
+    
     setRoomId(null)
     setMessages([])
     setStatus("Searching for a match...")
@@ -118,7 +210,6 @@ export default function RandomChat({ onBack }: { onBack?: () => void }) {
 
     connectSocket()
   }
-
   const handleSendMessage = (e: FormEvent) => {
     e.preventDefault()
     if (!isConnected || !inputValue.trim() || !roomId) return
@@ -127,29 +218,27 @@ export default function RandomChat({ onBack }: { onBack?: () => void }) {
       clearTimeout(typingTimeoutRef.current)
       typingTimeoutRef.current = null
     }
-    socketRef.current?.emit("typing", { roomId, isTyping: false })
+    
+    const chat = chatWsRef.current
+    if (chat && chat.readyState === WebSocket.OPEN) {
+      chat.send(JSON.stringify({ event: "typing", data: { roomId, isTyping: false } }))
+    }
 
     setMessages((prev) => [...prev, { text: inputValue, sender: "you" }])
-    socketRef.current!.emit("chat message", { msg: inputValue, roomId })
-    setInputValue("")
+    
+    if (chat && chat.readyState === WebSocket.OPEN) {
+      chat.send(JSON.stringify({ event: "chat message", data: { msg: inputValue, roomId } }))
+    }
+      setInputValue("")
     setStrangerTyping(false)
   }
 
   const handleTyping = (isTyping: boolean) => {
     if (!roomId || !isConnected) return
-    socketRef.current?.emit("typing", { roomId, isTyping })
+    const chat = chatWsRef.current
+    if (chat && chat.readyState === WebSocket.OPEN) {
+      chat.send(JSON.stringify({ event: "typing", data: { roomId, isTyping } }))    }
   }
-
-  useEffect(() => {
-    const pres = presenceRef.current
-    pres.connect()
-    pres.on("onlineUsers", setOnlineUsers)
-    return () => {
-      pres.off("onlineUsers", setOnlineUsers)
-      pres.disconnect()
-    }
-  }, [])
-
   useEffect(() => {
     const t = setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -170,7 +259,6 @@ export default function RandomChat({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="flex flex-col h-[100dvh] w-full max-w-none bg-gray-900 text-gray-100 overflow-hidden">
-      {/* Header - Increased size */}
       <header className="bg-gray-800 p-4 sm:p-5 shadow-md flex justify-between items-center flex-shrink-0">
         <div className="flex items-center">
           {onBack && (
@@ -192,7 +280,6 @@ export default function RandomChat({ onBack }: { onBack?: () => void }) {
         </div>
       </header>
 
-      {/* Status bar - Increased size */}
       <div className="bg-gray-800/50 p-3 sm:p-4 text-center border-b border-gray-700 flex-shrink-0">
         <p
           className={`text-sm sm:text-base font-medium ${
@@ -203,7 +290,7 @@ export default function RandomChat({ onBack }: { onBack?: () => void }) {
         </p>
       </div>
 
-      {/* Messages area */}
+
       <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 messagesContainer min-h-0">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.sender === "you" ? "justify-end" : "justify-start"}`}>
@@ -228,16 +315,15 @@ export default function RandomChat({ onBack }: { onBack?: () => void }) {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input area - Increased size */}
+  
       <form
         onSubmit={handleSendMessage}
         className="bg-gray-800 p-3 sm:p-4 border-t border-gray-700 flex items-center gap-2 sm:gap-3 flex-shrink-0"
-      >
-        {!isConnected && (
+      >        {!isConnected && (
           <button
             type="button"
             onClick={handleFindChat}
-            disabled={isSearching}
+            disabled={isSearching || !authToken}
             className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-3 rounded-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 text-base flex-shrink-0"
           >
             <span>{isSearching ? "Searching..." : "Find"}</span>
