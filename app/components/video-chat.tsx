@@ -50,6 +50,10 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   const [partnerId, setPartnerId] = useState<string | null>(null)
   const [role, setRole] = useState<"caller" | "callee" | null>(null)
 
+  // Debug state
+  // const [debugMode, setDebugMode] = useState(false)
+  // const [cameraTestResults, setCameraTestResults] = useState<any[]>([])
+
   useEffect(() => {
     return () => {
       cleanup()
@@ -432,9 +436,9 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { min: 1280, ideal: 1920, max: 1920 },
-          height: { min: 720, ideal: 1080, max: 1080 },
-          frameRate: { min: 24, ideal: 30, max: 60 },
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, min: 20, max: 60 }, // Prioritize higher frame rates
           aspectRatio: { ideal: 16/9 },
           facingMode: "user",
         },
@@ -454,7 +458,34 @@ export default function VideoChat({ onBack }: VideoChatProps) {
       const videoTrack = stream.getVideoTracks()[0]
       const audioTrack = stream.getAudioTracks()[0]
 
+      // Log actual captured video settings and capabilities
       if (videoTrack) {
+        const settings = videoTrack.getSettings()
+        const capabilities = videoTrack.getCapabilities()
+        
+        // Apply optimal frame rate based on capabilities
+        if (capabilities.frameRate?.max && capabilities.frameRate.max > (settings.frameRate || 0)) {
+          try {
+            // Use the maximum supported frame rate, but cap at 30fps for WebRTC stability
+            const optimalFrameRate = Math.min(30, capabilities.frameRate.max)
+            
+            await videoTrack.applyConstraints({
+              frameRate: { 
+                ideal: optimalFrameRate,
+                min: Math.max(20, settings.frameRate || 10)
+              },
+              width: settings.width,
+              height: settings.height
+            })
+            
+            // Wait for settings to apply
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            
+          } catch (error) {
+            // Silently handle frame rate constraint errors
+          }
+        }
+        
         videoTrack.enabled = isVideoEnabled
       }
 
@@ -490,12 +521,40 @@ export default function VideoChat({ onBack }: VideoChatProps) {
 
   const initializeCall = async (isInitiator: boolean) => {
     try {
-      const peerConnection = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+      const peerConnection = new RTCPeerConnection({ 
+        iceServers: ICE_SERVERS,
+        // Optimize for better frame rates
+        iceTransportPolicy: 'all',
+        bundlePolicy: 'max-bundle',
+        rtcpMuxPolicy: 'require'
+      })
       peerConnectionRef.current = peerConnection
 
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => {
-          peerConnection.addTrack(track, localStreamRef.current!)
+          const sender = peerConnection.addTrack(track, localStreamRef.current!)
+          
+          // Optimize video encoding for higher frame rates
+          if (track.kind === 'video') {
+            const settings = track.getSettings()
+            
+            const params = sender.getParameters()
+            if (!params.encodings) params.encodings = [{}]
+            
+            // Set encoding parameters to match our camera settings
+            const targetFrameRate = Math.min(30, settings.frameRate || 10)
+            params.encodings[0].maxFramerate = targetFrameRate
+            params.encodings[0].scaleResolutionDownBy = 1.0 // Don't downscale
+            
+            // Set bitrate to support higher frame rates
+            if (settings.width && settings.height) {
+              const pixelsPerSecond = settings.width * settings.height * targetFrameRate
+              const estimatedBitrate = Math.min(2500000, pixelsPerSecond * 0.1) // Cap at 2.5Mbps
+              params.encodings[0].maxBitrate = estimatedBitrate
+            }
+            
+            sender.setParameters(params).catch(console.error)
+          }
         })
       }
 
@@ -522,7 +581,10 @@ export default function VideoChat({ onBack }: VideoChatProps) {
       }
 
       if (isInitiator) {
-        const offer = await peerConnection.createOffer()
+        const offer = await peerConnection.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true,
+        })
         await peerConnection.setLocalDescription(offer)
 
         if (wsRef.current) {
@@ -681,57 +743,87 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     setError("")
   }
 
+  // Camera diagnostics and frame rate testing (removed for production)
+  // const testCameraCapabilities = async (videoTrack: MediaStreamTrack) => { ... }
+
   // Monitor video stats for debugging
   useEffect(() => {
     if (!isInCall || !peerConnectionRef.current) return
 
+    let lastInboundBytes = 0
+    let lastOutboundBytes = 0
+    let lastTimestamp = 0
+
     const interval = setInterval(() => {
       peerConnectionRef.current?.getStats(null).then(stats => {
-        const inboundStats = {}
-        const outboundStats = {}
+        const currentTime = Date.now()
         
         stats.forEach(report => {
           if (report.type === "inbound-rtp" && report.kind === "video") {
-            console.log("📥 Inbound Video Stats:", {
-              resolution: `${report.frameWidth}x${report.frameHeight}`,
-              framesPerSecond: report.framesPerSecond,
-              bytesReceived: report.bytesReceived,
-              packetsReceived: report.packetsReceived,
-              packetsLost: report.packetsLost,
-              jitter: report.jitter,
-              timestamp: report.timestamp
-            })
+            const bytesDiff = report.bytesReceived - lastInboundBytes
+            const timeDiff = (currentTime - lastTimestamp) / 1000
+            const bitrate = timeDiff > 0 ? (bytesDiff * 8) / timeDiff : 0
+
+            lastInboundBytes = report.bytesReceived
           }
           
           if (report.type === "outbound-rtp" && report.kind === "video") {
-            console.log("📤 Outbound Video Stats:", {
-              resolution: `${report.frameWidth}x${report.frameHeight}`,
-              framesPerSecond: report.framesPerSecond,
-              bytesSent: report.bytesSent,
-              packetsSent: report.packetsSent,
-              retransmittedPacketsSent: report.retransmittedPacketsSent,
-              targetBitrate: report.targetBitrate,
-              qualityLimitationReason: report.qualityLimitationReason,
-              timestamp: report.timestamp
-            })
+            const bytesDiff = report.bytesSent - lastOutboundBytes
+            const timeDiff = (currentTime - lastTimestamp) / 1000
+            const bitrate = timeDiff > 0 ? (bytesDiff * 8) / timeDiff : 0
+
+            lastOutboundBytes = report.bytesSent
           }
           
           if (report.type === "media-source" && report.kind === "video") {
-            console.log("🎥 Local Video Source:", {
-              width: report.width,
-              height: report.height,
-              framesPerSecond: report.framesPerSecond,
-              timestamp: report.timestamp
-            })
+            // Check if local video source frame rate is sub-optimal
+            if (report.framesPerSecond && report.framesPerSecond < 25) {
+              // Trigger frame rate maintenance
+              setTimeout(maintainOptimalFrameRate, 100)
+            }
           }
         })
+        
+        lastTimestamp = currentTime
       }).catch(error => {
-        console.error("Error getting stats:", error)
+        // Silently handle stats errors
       })
     }, 2000) // Check every 2 seconds
 
     return () => clearInterval(interval)
   }, [isInCall])
+
+  // Monitor and maintain optimal frame rate during call
+  const maintainOptimalFrameRate = () => {
+    if (!localStreamRef.current) return
+
+    const videoTrack = localStreamRef.current.getVideoTracks()[0]
+    if (!videoTrack) return
+
+    const settings = videoTrack.getSettings()
+    const capabilities = videoTrack.getCapabilities()
+    
+    // Check if frame rate has dropped below optimal
+    if (capabilities.frameRate?.max && settings.frameRate && settings.frameRate < 25) {
+      const optimalFrameRate = Math.min(30, capabilities.frameRate.max)
+      videoTrack.applyConstraints({
+        frameRate: { ideal: optimalFrameRate }
+      }).then(() => {
+        // Frame rate restored silently
+      }).catch(error => {
+        // Silently handle frame rate restoration errors
+      })
+    }
+  }
+
+  // Maintain optimal frame rate every 2 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      maintainOptimalFrameRate()
+    }, 2000)
+
+    return () => clearInterval(interval)
+  }, [isInCall, localStreamRef.current])
 
   return (
     <div className="flex flex-col h-screen bg-gradient-to-br from-black via-neutral-950 to-black text-white">
