@@ -439,7 +439,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
           width: { ideal: 1280, max: 1920 },
           height: { ideal: 720, max: 1080 },
           frameRate: { ideal: 30, min: 20, max: 60 }, // Prioritize higher frame rates
-          aspectRatio: { ideal: 16/9 },
+          aspectRatio: { ideal: 16 / 9 },
           facingMode: "user",
         },
         audio: {
@@ -462,30 +462,29 @@ export default function VideoChat({ onBack }: VideoChatProps) {
       if (videoTrack) {
         const settings = videoTrack.getSettings()
         const capabilities = videoTrack.getCapabilities()
-        
+
         // Apply optimal frame rate based on capabilities
         if (capabilities.frameRate?.max && capabilities.frameRate.max > (settings.frameRate || 0)) {
           try {
             // Use the maximum supported frame rate, but cap at 30fps for WebRTC stability
             const optimalFrameRate = Math.min(30, capabilities.frameRate.max)
-            
+
             await videoTrack.applyConstraints({
-              frameRate: { 
+              frameRate: {
                 ideal: optimalFrameRate,
-                min: Math.max(20, settings.frameRate || 10)
+                min: Math.max(20, settings.frameRate || 10),
               },
               width: settings.width,
-              height: settings.height
+              height: settings.height,
             })
-            
+
             // Wait for settings to apply
-            await new Promise(resolve => setTimeout(resolve, 1000))
-            
+            await new Promise((resolve) => setTimeout(resolve, 1000))
           } catch (error) {
             // Silently handle frame rate constraint errors
           }
         }
-        
+
         videoTrack.enabled = isVideoEnabled
       }
 
@@ -504,6 +503,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     }
   }
 
+  
   const cancelSearch = () => {
     if (!wsRef.current) return
 
@@ -521,38 +521,38 @@ export default function VideoChat({ onBack }: VideoChatProps) {
 
   const initializeCall = async (isInitiator: boolean) => {
     try {
-      const peerConnection = new RTCPeerConnection({ 
+      const peerConnection = new RTCPeerConnection({
         iceServers: ICE_SERVERS,
         // Optimize for better frame rates
-        iceTransportPolicy: 'all',
-        bundlePolicy: 'max-bundle',
-        rtcpMuxPolicy: 'require'
+        iceTransportPolicy: "all",
+        bundlePolicy: "max-bundle",
+        rtcpMuxPolicy: "require",
       })
       peerConnectionRef.current = peerConnection
 
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => {
           const sender = peerConnection.addTrack(track, localStreamRef.current!)
-          
+
           // Optimize video encoding for higher frame rates
-          if (track.kind === 'video') {
+          if (track.kind === "video") {
             const settings = track.getSettings()
-            
+
             const params = sender.getParameters()
             if (!params.encodings) params.encodings = [{}]
-            
+
             // Set encoding parameters to match our camera settings
             const targetFrameRate = Math.min(30, settings.frameRate || 10)
             params.encodings[0].maxFramerate = targetFrameRate
             params.encodings[0].scaleResolutionDownBy = 1.0 // Don't downscale
-            
+
             // Set bitrate to support higher frame rates
             if (settings.width && settings.height) {
               const pixelsPerSecond = settings.width * settings.height * targetFrameRate
               const estimatedBitrate = Math.min(2500000, pixelsPerSecond * 0.1) // Cap at 2.5Mbps
               params.encodings[0].maxBitrate = estimatedBitrate
             }
-            
+
             sender.setParameters(params).catch(console.error)
           }
         })
@@ -755,39 +755,42 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     let lastTimestamp = 0
 
     const interval = setInterval(() => {
-      peerConnectionRef.current?.getStats(null).then(stats => {
-        const currentTime = Date.now()
-        
-        stats.forEach(report => {
-          if (report.type === "inbound-rtp" && report.kind === "video") {
-            const bytesDiff = report.bytesReceived - lastInboundBytes
-            const timeDiff = (currentTime - lastTimestamp) / 1000
-            const bitrate = timeDiff > 0 ? (bytesDiff * 8) / timeDiff : 0
+      peerConnectionRef.current
+        ?.getStats(null)
+        .then((stats) => {
+          const currentTime = Date.now()
 
-            lastInboundBytes = report.bytesReceived
-          }
-          
-          if (report.type === "outbound-rtp" && report.kind === "video") {
-            const bytesDiff = report.bytesSent - lastOutboundBytes
-            const timeDiff = (currentTime - lastTimestamp) / 1000
-            const bitrate = timeDiff > 0 ? (bytesDiff * 8) / timeDiff : 0
+          stats.forEach((report) => {
+            if (report.type === "inbound-rtp" && report.kind === "video") {
+              const bytesDiff = report.bytesReceived - lastInboundBytes
+              const timeDiff = (currentTime - lastTimestamp) / 1000
+              const bitrate = timeDiff > 0 ? (bytesDiff * 8) / timeDiff : 0
 
-            lastOutboundBytes = report.bytesSent
-          }
-          
-          if (report.type === "media-source" && report.kind === "video") {
-            // Check if local video source frame rate is sub-optimal
-            if (report.framesPerSecond && report.framesPerSecond < 25) {
-              // Trigger frame rate maintenance
-              setTimeout(maintainOptimalFrameRate, 100)
+              lastInboundBytes = report.bytesReceived
             }
-          }
+
+            if (report.type === "outbound-rtp" && report.kind === "video") {
+              const bytesDiff = report.bytesSent - lastOutboundBytes
+              const timeDiff = (currentTime - lastTimestamp) / 1000
+              const bitrate = timeDiff > 0 ? (bytesDiff * 8) / timeDiff : 0
+
+              lastOutboundBytes = report.bytesSent
+            }
+
+            if (report.type === "media-source" && report.kind === "video") {
+              // Check if local video source frame rate is sub-optimal
+              if (report.framesPerSecond && report.framesPerSecond < 25) {
+                // Trigger frame rate maintenance
+                setTimeout(maintainOptimalFrameRate, 100)
+              }
+            }
+          })
+
+          lastTimestamp = currentTime
         })
-        
-        lastTimestamp = currentTime
-      }).catch(error => {
-        // Silently handle stats errors
-      })
+        .catch((error) => {
+          // Silently handle stats errors
+        })
     }, 2000) // Check every 2 seconds
 
     return () => clearInterval(interval)
@@ -802,17 +805,20 @@ export default function VideoChat({ onBack }: VideoChatProps) {
 
     const settings = videoTrack.getSettings()
     const capabilities = videoTrack.getCapabilities()
-    
+
     // Check if frame rate has dropped below optimal
     if (capabilities.frameRate?.max && settings.frameRate && settings.frameRate < 25) {
       const optimalFrameRate = Math.min(30, capabilities.frameRate.max)
-      videoTrack.applyConstraints({
-        frameRate: { ideal: optimalFrameRate }
-      }).then(() => {
-        // Frame rate restored silently
-      }).catch(error => {
-        // Silently handle frame rate restoration errors
-      })
+      videoTrack
+        .applyConstraints({
+          frameRate: { ideal: optimalFrameRate },
+        })
+        .then(() => {
+          // Frame rate restored silently
+        })
+        .catch((error) => {
+          // Silently handle frame rate restoration errors
+        })
     }
   }
 
@@ -826,194 +832,255 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   }, [isInCall, localStreamRef.current])
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-black via-neutral-950 to-black text-white">
-      {/* Background Effects */}
-      <div className="absolute inset-0 opacity-20">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,255,255,0.1)_1px,transparent_1px)] bg-[length:50px_50px]"></div>
-      </div>
+    <div className="flex flex-col h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white overflow-hidden">
+      {/* Ambient Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-purple-900/10 to-slate-900/30"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(59,130,246,0.15),transparent_50%)]"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(147,51,234,0.1),transparent_50%)]"></div>
 
       {/* Header Section */}
       <header
-        className={`relative z-50 bg-black/60 backdrop-blur-xl border-b border-white/[0.1] p-4 flex-shrink-0 ${isInCall ? "hidden md:block" : ""}`}
+        className={`relative z-50 backdrop-blur-xl bg-slate-900/80 border-b border-slate-700/50 transition-all duration-300 ${
+          isInCall ? "hidden md:block" : ""
+        }`}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <button onClick={onBack} className="mr-4 p-2 rounded-xl hover:bg-white/10 transition-colors">
-              <ArrowLeft className="w-5 h-5" />
+        <div className="flex items-center justify-between p-4 max-w-7xl mx-auto">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={onBack}
+              className="group p-2.5 rounded-xl bg-slate-800/50 hover:bg-slate-700/50 border border-slate-600/30 hover:border-slate-500/50 transition-all duration-200 hover:scale-105"
+            >
+              <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-white transition-colors" />
             </button>
-            <h1 className="text-lg md:text-xl font-bold bg-gradient-to-r from-white to-neutral-300 bg-clip-text text-transparent">
-              Video Chat
-            </h1>
+            <div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-300 bg-clip-text text-transparent">
+                Video Chat
+              </h1>
+              <p className="text-xs text-slate-400 mt-0.5">Connect with people worldwide</p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center space-x-3">
             <div
-              className={`px-2 md:px-3 py-1 rounded-full text-xs font-medium ${
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 ${
                 connectionStatus === "connected"
-                  ? "bg-green-500/20 text-green-400"
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-emerald-500/20 shadow-sm"
                   : connectionStatus === "searching"
-                    ? "bg-yellow-500/20 text-yellow-400"
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/30 shadow-amber-500/20 shadow-sm animate-pulse"
                     : connectionStatus === "in-call"
-                      ? "bg-blue-500/20 text-blue-400"
-                      : "bg-gray-500/20 text-gray-400"
+                      ? "bg-blue-500/20 text-blue-300 border-blue-500/30 shadow-blue-500/20 shadow-sm"
+                      : "bg-slate-500/20 text-slate-400 border-slate-500/30"
               }`}
             >
-              {connectionStatus}
+              <div className="flex items-center space-x-1.5">
+                <div
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    connectionStatus === "connected"
+                      ? "bg-emerald-400"
+                      : connectionStatus === "searching"
+                        ? "bg-amber-400 animate-pulse"
+                        : connectionStatus === "in-call"
+                          ? "bg-blue-400"
+                          : "bg-slate-400"
+                  }`}
+                ></div>
+                <span className="capitalize">{connectionStatus.replace("-", " ")}</span>
+              </div>
             </div>
           </div>
         </div>
       </header>
 
       {/* Video Section - Takes remaining space */}
-      <div ref={videoContainerRef} className="flex-1 relative bg-black overflow-hidden">
+      <div ref={videoContainerRef} className="flex-1 relative bg-slate-900 overflow-hidden">
         {/* Remote Video */}
         <video
           ref={remoteVideoRef}
           autoPlay
           playsInline
-          className="absolute inset-0 w-full h-full object-cover md:object-contain"
+          className="absolute inset-0 w-full h-full object-cover md:object-contain transition-opacity duration-500"
           style={{ display: isInCall ? "block" : "none" }}
         />
 
-        {/* Local Video - positioned within video container with smaller mobile size */}
+        {/* Local Video - Enhanced styling */}
         <div
           ref={localVideoContainerRef}
-          className="absolute w-25 h-33 md:w-48 md:h-36 bg-black/60 rounded-xl overflow-hidden border border-white/10 z-10 touch-none cursor-move smooth-transition"
+          className="absolute bg-slate-800/90 backdrop-blur-sm rounded-2xl overflow-hidden border-2 border-slate-600/40 shadow-2xl z-10 touch-none cursor-move smooth-transition hover:border-slate-500/60 hover:shadow-slate-900/50"
           style={{
             width: isMobile ? "100px" : "192px",
             height: isMobile ? "133px" : "144px",
             top: `${localVideoPosition.y}px`,
             left: `${localVideoPosition.x}px`,
             display: isInCall || connectionStatus === "searching" || connectionStatus === "matched" ? "block" : "none",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05)",
           }}
           onMouseDown={handleMouseDown}
           onTouchStart={handleTouchStart}
         >
           <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
           {!isVideoEnabled && (
-            <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
-              <VideoOff className="w-8 h-8 text-white/60" />
+            <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center">
+              <div className="text-center">
+                <VideoOff className="w-6 h-6 text-slate-400 mx-auto mb-1" />
+                <span className="text-xs text-slate-400">Camera off</span>
+              </div>
             </div>
           )}
+          {/* Drag indicator */}
+          <div className="absolute top-2 right-2 w-1 h-1 bg-white/30 rounded-full"></div>
+          <div className="absolute top-2 right-4 w-1 h-1 bg-white/30 rounded-full"></div>
+          <div className="absolute top-2 right-6 w-1 h-1 bg-white/30 rounded-full"></div>
         </div>
 
-        {/* Status Overlay */}
+        {/* Status Overlay - Enhanced design */}
         {!isInCall && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-            <div className="text-center max-w-md mx-auto p-8">
-              <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gradient-to-r from-white/10 to-white/5 flex items-center justify-center border border-white/10">
-                {connectionStatus === "searching" ? (
-                  <Search className="w-12 h-12 text-white/80 animate-pulse" />
-                ) : connectionStatus === "matched" ? (
-                  <Users className="w-12 h-12 text-white/80" />
-                ) : (
-                  <Video className="w-12 h-12 text-white/80" />
-                )}
-              </div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center max-w-md mx-auto p-8 relative">
+              {/* Animated background glow */}
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10 rounded-3xl blur-xl"></div>
 
-              <h2 className="text-2xl font-bold mb-2">
-                {connectionStatus === "disconnected"
-                  ? "Ready to Connect"
-                  : connectionStatus === "connecting"
-                    ? "Connecting..."
-                    : connectionStatus === "connected"
-                      ? "Ready for Video Chat"
-                      : connectionStatus === "searching"
-                        ? "Finding a Match"
-                        : connectionStatus === "matched"
-                          ? "Match Found!"
-                          : "Video Chat"}
-              </h2>
-
-              <p className="text-white/60 mb-6">
-                {statusMessage || "Connect to start a random video chat with strangers"}
-              </p>
-
-              {error && (
-                <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                  {error}
+              <div className="relative">
+                <div className="w-28 h-28 mx-auto mb-8 rounded-full bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center border border-slate-600/30 shadow-2xl backdrop-blur-sm aspect-square">
+                  {connectionStatus === "searching" ? (
+                    <div className="relative flex items-center justify-center w-full h-full">
+                      <Search className="w-14 h-14 text-blue-400 z-10" />
+                      <div className="absolute inset-0 rounded-full animate-spin">
+                        <div className="w-full h-full rounded-full border border-transparent border-t-blue-400 opacity-60"></div>
+                      </div>
+                    </div>
+                  ) : connectionStatus === "matched" ? (
+                    <div className="relative">
+                      <Users className="w-14 h-14 text-emerald-400" />
+                      <div className="absolute -inset-2 rounded-full border border-emerald-400/30 animate-ping"></div>
+                    </div>
+                  ) : (
+                    <Video className="w-14 h-14 text-slate-300" />
+                  )}
                 </div>
-              )}
 
-              {/* Action Buttons */}
-              <div className="flex gap-4 justify-center">
-                {connectionStatus === "disconnected" && (
-                  <button
-                    onClick={connectToServer}
-                    className="px-6 py-3 bg-white text-black rounded-xl font-semibold hover:bg-gray-100 transition-colors flex items-center"
-                  >
-                    <Video className="w-5 h-5 mr-2" />
-                    Connect to Server
-                  </button>
+                <h2 className="text-3xl font-bold mb-3 bg-gradient-to-r from-white via-slate-200 to-slate-300 bg-clip-text text-transparent">
+                  {connectionStatus === "disconnected"
+                    ? "Ready to Connect"
+                    : connectionStatus === "connecting"
+                      ? "Connecting..."
+                      : connectionStatus === "connected"
+                        ? "Ready for Video Chat"
+                        : connectionStatus === "searching"
+                          ? "Finding Your Match"
+                          : connectionStatus === "matched"
+                            ? "Match Found!"
+                            : "Video Chat"}
+                </h2>
+
+                <p className="text-slate-400 mb-8 leading-relaxed">
+                  {statusMessage || "Connect to start a random video chat with people from around the world"}
+                </p>
+
+                {error && (
+                  <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-300 text-sm backdrop-blur-sm">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                      <span>{error}</span>
+                    </div>
+                  </div>
                 )}
 
-                {connectionStatus === "connected" && (
-                  <>
+                {/* Action Buttons - Enhanced styling */}
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  {connectionStatus === "disconnected" && (
                     <button
-                      onClick={findMatch}
-                      disabled={isProcessing}
-                      className={`px-6 py-3 rounded-xl font-semibold transition-colors flex items-center ${
-                        isProcessing
-                          ? "bg-gray-600 text-gray-400 cursor-not-allowed"
-                          : "bg-green-600 hover:bg-green-700 text-white"
-                      }`}
+                      onClick={connectToServer}
+                      className="group px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl font-semibold transition-all duration-200 flex items-center justify-center space-x-3 shadow-lg hover:shadow-blue-500/25 hover:scale-105 border border-blue-500/20"
                     >
-                      <Search className="w-5 h-5 mr-2" />
-                      {isProcessing ? "Processing..." : "Find Match"}
+                      <Video className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                      <span>Connect to Server</span>
                     </button>
-                    <button
-                      onClick={disconnect}
-                      className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-colors"
-                    >
-                      Disconnect
-                    </button>
-                  </>
-                )}
+                  )}
 
-                {connectionStatus === "searching" && (
-                  <button
-                    onClick={cancelSearch}
-                    className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-colors flex items-center"
-                  >
-                    <X className="w-5 h-5 mr-2" />
-                    Cancel Search
-                  </button>
-                )}
+                  {connectionStatus === "connected" && (
+                    <>
+                      <button
+                        onClick={findMatch}
+                        disabled={isProcessing}
+                        className={`group px-8 py-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center space-x-3 shadow-lg border ${
+                          isProcessing
+                            ? "bg-slate-600/50 text-slate-400 cursor-not-allowed border-slate-600/30"
+                            : "bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white hover:shadow-emerald-500/25 hover:scale-105 border-emerald-500/20"
+                        }`}
+                      >
+                        <Search
+                          className={`w-5 h-5 ${isProcessing ? "animate-spin" : "group-hover:scale-110"} transition-transform`}
+                        />
+                        <span>{isProcessing ? "Processing..." : "Find Match"}</span>
+                      </button>
+                      <button
+                        onClick={disconnect}
+                        className="group px-8 py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-red-500/25 hover:scale-105 border border-red-500/20"
+                      >
+                        <span>Disconnect</span>
+                      </button>
+                    </>
+                  )}
+
+                  {connectionStatus === "searching" && (
+                    <button
+                      onClick={cancelSearch}
+                      className="group px-8 py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl font-semibold transition-all duration-200 flex items-center justify-center space-x-3 shadow-lg hover:shadow-red-500/25 hover:scale-105 border border-red-500/20"
+                    >
+                      <X className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                      <span>Cancel Search</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         )}
       </div>
 
-      {/* Controls Section - Fixed at bottom */}
+      {/* Controls Section - Enhanced design */}
       {(connectionStatus === "searching" || connectionStatus === "matched" || isInCall) && (
-        <div className="relative z-50 bg-black/80 backdrop-blur-xl border-t border-white/10 p-4 pb-safe flex-shrink-0">
-          <div className="flex items-center justify-center gap-4">
-            <button
-              onClick={toggleAudio}
-              className={`p-4 rounded-xl transition-colors ${
-                isAudioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-600 hover:bg-red-700 text-white"
-              }`}
-            >
-              {isAudioEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
-            </button>
-
-            <button
-              onClick={toggleVideo}
-              className={`p-4 rounded-xl transition-colors ${
-                isVideoEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-600 hover:bg-red-700 text-white"
-              }`}
-            >
-              {isVideoEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
-            </button>
-
-            {(connectionStatus === "matched" || isInCall) && (
+        <div className="relative z-50 backdrop-blur-xl bg-slate-900/90 border-t border-slate-700/50 pb-safe">
+          <div className="p-6">
+            <div className="flex items-center justify-center space-x-6 max-w-md mx-auto">
               <button
-                onClick={leaveCall}
-                className="p-4 rounded-xl bg-red-600 hover:bg-red-700 text-white transition-colors"
+                onClick={toggleAudio}
+                className={`group p-4 rounded-2xl transition-all duration-200 shadow-lg hover:scale-105 border ${
+                  isAudioEnabled
+                    ? "bg-slate-700/50 hover:bg-slate-600/50 text-white border-slate-600/30 hover:border-slate-500/50"
+                    : "bg-red-600/90 hover:bg-red-500/90 text-white border-red-500/30 shadow-red-500/20"
+                }`}
               >
-                <PhoneOff className="w-6 h-6" />
+                {isAudioEnabled ? (
+                  <Mic className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                ) : (
+                  <MicOff className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                )}
               </button>
-            )}
+
+              <button
+                onClick={toggleVideo}
+                className={`group p-4 rounded-2xl transition-all duration-200 shadow-lg hover:scale-105 border ${
+                  isVideoEnabled
+                    ? "bg-slate-700/50 hover:bg-slate-600/50 text-white border-slate-600/30 hover:border-slate-500/50"
+                    : "bg-red-600/90 hover:bg-red-500/90 text-white border-red-500/30 shadow-red-500/20"
+                }`}
+              >
+                {isVideoEnabled ? (
+                  <Video className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                ) : (
+                  <VideoOff className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                )}
+              </button>
+
+              {(connectionStatus === "matched" || isInCall) && (
+                <button
+                  onClick={leaveCall}
+                  className="group p-4 rounded-2xl bg-red-600/90 hover:bg-red-500/90 text-white transition-all duration-200 shadow-lg hover:scale-105 border border-red-500/30 shadow-red-500/20"
+                >
+                  <PhoneOff className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
