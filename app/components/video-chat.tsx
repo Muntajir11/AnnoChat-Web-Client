@@ -50,10 +50,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   const [partnerId, setPartnerId] = useState<string | null>(null)
   const [role, setRole] = useState<"caller" | "callee" | null>(null)
 
-  // Audio gain control for microphone sensitivity adjustment
-  const [microphoneGain, setMicrophoneGain] = useState(0.7) // Default to 70% gain
-
-  // Audio level monitoring
+  // Audio level monitoring for visual feedback only
   const [audioLevel, setAudioLevel] = useState(0)
   const audioAnalyserRef = useRef<AnalyserNode | null>(null)
   const audioLevelIntervalRef = useRef<number | null>(null)
@@ -454,38 +451,47 @@ export default function VideoChat({ onBack }: VideoChatProps) {
           facingMode: "user",
         },
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          echoCancellation: { exact: true },
+          noiseSuppression: { exact: true },
+          autoGainControl: { exact: true },
           sampleRate: { ideal: 48000 },
+          // Enhanced browser-native audio processing
+          channelCount: { ideal: 1 }, // Mono for better processing
         },
       })
 
-      // Apply additional audio processing for better noise suppression
+      // Apply WhatsApp-style minimal audio processing
       const streamAudioTrack = stream.getAudioTracks()[0]
       if (streamAudioTrack) {
-        // Apply standard constraints for better noise suppression
+        // Apply enhanced constraints for optimal audio quality
         try {
           await streamAudioTrack.applyConstraints({
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
+            echoCancellation: { exact: true },
+            noiseSuppression: { exact: true },
+            autoGainControl: { exact: true },
+            // Use advanced browser-specific settings when available
+            // @ts-ignore - Browser-specific advanced audio processing
+            googEchoCancellation: true,
+            googAutoGainControl: true,
+            googNoiseSuppression: true,
+            googHighpassFilter: true,
+            googTypingNoiseDetection: true,
+            // Ensure smooth audio flow
+            googAudioMirroring: false,
           })
         } catch (constraintError) {
-          console.log("Audio constraints not supported, using defaults")
+          console.log("Advanced audio constraints not supported, using standard constraints")
         }
         streamAudioTrack.enabled = isAudioEnabled
       }
 
-      // Start audio level monitoring for visual feedback
-      startAudioLevelMonitoring(stream)
 
       localStreamRef.current = stream
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream
       }
 
-      // Start basic audio level monitoring (removed aggressive processing)
+      // Start basic audio level monitoring (no aggressive processing)
       startAudioLevelMonitoring(stream)
 
       const videoTrack = stream.getVideoTracks()[0]
@@ -570,13 +576,17 @@ export default function VideoChat({ onBack }: VideoChatProps) {
         localStreamRef.current.getTracks().forEach((track) => {
           const sender = peerConnection.addTrack(track, localStreamRef.current!)
 
-          // Optimize audio encoding for better quality
+          // Optimize audio encoding with DTX for WhatsApp-style smoothness
           if (track.kind === "audio") {
             const params = sender.getParameters()
             if (!params.encodings) params.encodings = [{}]
 
-            // Configure audio parameters for good quality
-            params.encodings[0].maxBitrate = 64000 // 64 kbps for good audio quality
+            // Enable DTX (Discontinuous Transmission) for smooth audio flow
+            // @ts-ignore - DTX is supported but not in TypeScript definitions yet
+            params.encodings[0].dtx = true
+            // Configure audio parameters for excellent quality
+            params.encodings[0].maxBitrate = 128000  // 96 kbps for excellent audio quality
+            params.encodings[0].priority = "high" // Prioritize audio
             
             sender.setParameters(params).catch(console.error)
           }
@@ -878,172 +888,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     return () => clearInterval(interval)
   }, [isInCall, localStreamRef.current])
 
-  // Noise gate to reduce background noise
-  const createNoiseGate = (stream: MediaStream, threshold: number = -50) => {
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-      const source = audioContext.createMediaStreamSource(stream)
-      const analyser = audioContext.createAnalyser()
-      const gainNode = audioContext.createGain()
-      const destination = audioContext.createMediaStreamDestination()
-
-      // Configure analyser for noise detection
-      analyser.fftSize = 512
-      analyser.smoothingTimeConstant = 0.8
-
-      // Connect nodes
-      source.connect(analyser)
-      analyser.connect(gainNode)
-      gainNode.connect(destination)
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount)
-      let isGateOpen = false
-      let gateTimer = 0
-
-      // Noise gate processing
-      const processAudio = () => {
-        analyser.getByteFrequencyData(dataArray)
-        
-        // Calculate average volume
-        const average = dataArray.reduce((a, b) => a + b) / dataArray.length
-        const volume = 20 * Math.log10(average / 255) // Convert to dB
-        
-        // Gate logic with hysteresis
-        const openThreshold = threshold
-        const closeThreshold = threshold - 10 // 10dB hysteresis
-        
-        if (volume > openThreshold && !isGateOpen) {
-          isGateOpen = true
-          gainNode.gain.setTargetAtTime(1, audioContext.currentTime, 0.01)
-          gateTimer = 0
-        } else if (volume < closeThreshold && isGateOpen) {
-          gateTimer++
-          // Close gate after 100ms of low volume
-          if (gateTimer > 10) {
-            isGateOpen = false
-            gainNode.gain.setTargetAtTime(0.1, audioContext.currentTime, 0.05) // Reduce to 10% instead of complete cutoff
-          }
-        } else if (isGateOpen) {
-          gateTimer = 0
-        }
-        
-        requestAnimationFrame(processAudio)
-      }
-      
-      processAudio()
-      
-      return destination.stream
-    } catch (error) {
-      console.warn("Noise gate not supported, using original stream:", error)
-      return stream
-    }
-  }
-
-  // Apply gain control to audio stream
-  const applyGainControl = (stream: MediaStream, gainValue: number) => {
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-      const source = audioContext.createMediaStreamSource(stream)
-      const gainNode = audioContext.createGain()
-      const destination = audioContext.createMediaStreamDestination()
-
-      // Set gain value (0.0 to 1.0)
-      gainNode.gain.value = gainValue
-
-      // Connect nodes
-      source.connect(gainNode)
-      gainNode.connect(destination)
-
-      return destination.stream
-    } catch (error) {
-      console.warn("Gain control not supported:", error)
-      return stream
-    }
-  }
-
-  // Real-time gain adjustment
-  const gainNodeRef = useRef<GainNode | null>(null)
-  const audioContextRef = useRef<AudioContext | null>(null)
-
-  // Update gain in real-time when slider changes
-  useEffect(() => {
-    if (gainNodeRef.current) {
-      gainNodeRef.current.gain.setValueAtTime(microphoneGain, audioContextRef.current!.currentTime)
-    }
-  }, [microphoneGain])
-
-  // Enhanced audio processing with real-time gain control
-  const createAdvancedAudioProcessor = (stream: MediaStream) => {
-    try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
-      audioContextRef.current = audioContext
-
-      const source = audioContext.createMediaStreamSource(stream)
-      const gainNode = audioContext.createGain()
-      const analyser = audioContext.createAnalyser()
-      const destination = audioContext.createMediaStreamDestination()
-
-      // Configure nodes
-      gainNode.gain.value = microphoneGain
-      gainNodeRef.current = gainNode
-
-      // Noise gate setup
-      analyser.fftSize = 512
-      analyser.smoothingTimeConstant = 0.8
-
-      // Connect nodes
-      source.connect(gainNode)
-      gainNode.connect(analyser)
-      analyser.connect(destination)
-
-      // Noise gate processing
-      const dataArray = new Uint8Array(analyser.frequencyBinCount)
-      let isGateOpen = false
-      let gateTimer = 0
-
-      const processAudio = () => {
-        analyser.getByteFrequencyData(dataArray)
-        
-        const average = dataArray.reduce((a, b) => a + b) / dataArray.length
-        const volume = 20 * Math.log10(average / 255)
-        
-        // Adaptive threshold based on gain setting
-        const threshold = -45 + (microphoneGain - 0.7) * 20
-        const openThreshold = threshold
-        const closeThreshold = threshold - 10
-        
-        if (volume > openThreshold && !isGateOpen) {
-          isGateOpen = true
-          gateTimer = 0
-        } else if (volume < closeThreshold && isGateOpen) {
-          gateTimer++
-          if (gateTimer > 10) {
-            isGateOpen = false
-          }
-        } else if (isGateOpen) {
-          gateTimer = 0
-        }
-        
-        // Apply gate
-        const targetGain = isGateOpen ? microphoneGain : microphoneGain * 0.1
-        gainNode.gain.setTargetAtTime(targetGain, audioContext.currentTime, 0.05)
-        
-        // Update visual level indicator
-        setAudioLevel(average / 255)
-        
-        requestAnimationFrame(processAudio)
-      }
-      
-      processAudio()
-      
-      return destination.stream
-    } catch (error) {
-      console.warn("Advanced audio processing not supported:", error)
-      return stream
-    }
-  }
-
-  // Simplified audio level monitoring
+  // Simplified audio level monitoring for visual feedback only
   const startAudioLevelMonitoring = (stream: MediaStream) => {
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -1062,7 +907,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
         if (audioAnalyserRef.current) {
           audioAnalyserRef.current.getByteFrequencyData(dataArray)
           const average = dataArray.reduce((a, b) => a + b) / dataArray.length
-          setAudioLevel(average / 255) // Normalize to 0-1
+          setAudioLevel(average / 255) // Normalize to 0-1 for visual indicator only
         }
       }
       
@@ -1331,24 +1176,6 @@ export default function VideoChat({ onBack }: VideoChatProps) {
                 </button>
               )}
             </div>
-
-            {/* Audio Level Indicator - Only during call */}
-            {isAudioEnabled && isInCall && (
-              <div className="mt-2 flex items-center justify-center space-x-1">
-                {[...Array(6)].map((_, i) => (
-                  <div
-                    key={i}
-                    className={`w-1 h-2 rounded-full transition-colors duration-150 ${
-                      audioLevel > i * 0.16
-                        ? audioLevel > 0.6
-                          ? "bg-red-400"
-                          : "bg-green-400"
-                        : "bg-slate-600"
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
           </div>
         </div>
       )}
