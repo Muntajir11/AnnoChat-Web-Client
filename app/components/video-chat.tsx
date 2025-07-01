@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { ArrowLeft, Video, VideoOff, Mic, MicOff, PhoneOff, Users, Search, X } from "lucide-react"
 
-const WEBSOCKET_URL = "wss://annochat.social/video"
+const WEBSOCKET_URL = "wss://muntajir.me/video"
 
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
