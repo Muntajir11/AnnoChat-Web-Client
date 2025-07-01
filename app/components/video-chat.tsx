@@ -36,6 +36,13 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [isMobile, setIsMobile] = useState(false)
 
+  // Controls auto-hide functionality
+  const [showControls, setShowControls] = useState(true)
+  const [controlsTimeoutId, setControlsTimeoutId] = useState<NodeJS.Timeout | null>(null)
+  
+  // Track screen size for dynamic border radius
+  const [screenWidth, setScreenWidth] = useState(768)
+
   const wsRef = useRef<WebSocket | null>(null)
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
@@ -60,8 +67,16 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   // const [cameraTestResults, setCameraTestResults] = useState<any[]>([])
 
   useEffect(() => {
+    // Initialize screen width on client side
+    if (typeof window !== 'undefined') {
+      setScreenWidth(window.innerWidth)
+    }
+    
     return () => {
       cleanup()
+      if (controlsTimeoutId) {
+        clearTimeout(controlsTimeoutId)
+      }
     }
   }, [])
 
@@ -81,7 +96,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     if (mobile) {
       // For mobile, account for header and controls
       const headerHeight = isInCall ? 0 : 80 // Header hidden in call
-      const controlsHeight = connectionStatus === "searching" || connectionStatus === "matched" || isInCall ? 80 : 0
+      const controlsHeight = (connectionStatus === "searching" || connectionStatus === "matched" || isInCall) && showControls ? 80 : 0
       availableHeight = window.innerHeight - headerHeight - controlsHeight - 20 // Extra padding
     } else {
       // For desktop, use video container if available
@@ -90,8 +105,9 @@ export default function VideoChat({ onBack }: VideoChatProps) {
         availableWidth = rect.width
         availableHeight = rect.height
       } else {
-        // Fallback for desktop
-        availableHeight = window.innerHeight - 160 // Account for header/controls
+        // Fallback for desktop - controls always visible on desktop
+        const controlsHeight = (connectionStatus === "searching" || connectionStatus === "matched" || isInCall) ? 80 : 0
+        availableHeight = window.innerHeight - 160 - controlsHeight // Account for header/controls
       }
     }
 
@@ -112,6 +128,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     const checkMobile = () => {
       const mobile = window.innerWidth <= 768
       setIsMobile(mobile)
+      setScreenWidth(window.innerWidth) // Update screen width state
 
       // Set position using safe calculation
       setTimeout(() => {
@@ -123,7 +140,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     checkMobile()
     window.addEventListener("resize", checkMobile)
     return () => window.removeEventListener("resize", checkMobile)
-  }, [connectionStatus, isInCall]) // Recalculate when state changes
+  }, [connectionStatus, isInCall, showControls]) // Recalculate when state changes
 
   // Handle window resize and state changes
   useEffect(() => {
@@ -148,13 +165,15 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     return () => {
       window.removeEventListener("resize", handleResize)
     }
-  }, [connectionStatus, isInCall])
+  }, [connectionStatus, isInCall, showControls])
 
   // Draggable functionality for local video
   const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
     setIsDragging(true)
     if (localVideoContainerRef.current) {
       localVideoContainerRef.current.classList.remove("smooth-transition")
+      localVideoContainerRef.current.style.transition = "none"
     }
 
     setDragStart({
@@ -164,9 +183,11 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   }
 
   const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault()
     setIsDragging(true)
     if (localVideoContainerRef.current) {
       localVideoContainerRef.current.classList.remove("smooth-transition")
+      localVideoContainerRef.current.style.transition = "none"
     }
 
     const touch = e.touches[0]
@@ -178,6 +199,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
 
   const handleMouseMove = (e: MouseEvent) => {
     if (isDragging) {
+      e.preventDefault()
       const newX = e.clientX - dragStart.x
       const newY = e.clientY - dragStart.y
 
@@ -186,7 +208,10 @@ export default function VideoChat({ onBack }: VideoChatProps) {
       const finalX = Math.max(margin, Math.min(newX, maxX))
       const finalY = Math.max(margin, Math.min(newY, maxY))
 
-      setLocalVideoPosition({ x: finalX, y: finalY })
+      // Use requestAnimationFrame for smooth dragging
+      requestAnimationFrame(() => {
+        setLocalVideoPosition({ x: finalX, y: finalY })
+      })
     }
   }
 
@@ -202,13 +227,17 @@ export default function VideoChat({ onBack }: VideoChatProps) {
       const finalX = Math.max(margin, Math.min(newX, maxX))
       const finalY = Math.max(margin, Math.min(newY, maxY))
 
-      setLocalVideoPosition({ x: finalX, y: finalY })
+      // Use requestAnimationFrame for smooth dragging
+      requestAnimationFrame(() => {
+        setLocalVideoPosition({ x: finalX, y: finalY })
+      })
     }
   }
 
   const handleMouseUp = () => {
     if (isDragging) {
       if (localVideoContainerRef.current) {
+        localVideoContainerRef.current.style.transition = "top 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), left 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
         localVideoContainerRef.current.classList.add("smooth-transition")
       }
 
@@ -244,7 +273,10 @@ export default function VideoChat({ onBack }: VideoChatProps) {
         }
       }
 
-      setLocalVideoPosition({ x: finalX, y: finalY })
+      // Smooth transition to final position
+      requestAnimationFrame(() => {
+        setLocalVideoPosition({ x: finalX, y: finalY })
+      })
     }
 
     setIsDragging(false)
@@ -265,6 +297,72 @@ export default function VideoChat({ onBack }: VideoChatProps) {
       }
     }
   }, [isDragging, dragStart, localVideoPosition])
+
+  // Auto-hide controls functionality (mobile only)
+  const startControlsTimeout = () => {
+    if (controlsTimeoutId) {
+      clearTimeout(controlsTimeoutId)
+    }
+    
+    // Only auto-hide controls during actual calls on mobile
+    if (isInCall && isMobile) {
+      const timeoutId = setTimeout(() => {
+        setShowControls(false)
+      }, 5000) // Hide after 5 seconds
+      
+      setControlsTimeoutId(timeoutId)
+    }
+  }
+
+  const handleScreenClick = () => {
+    // Only allow auto-hide on mobile devices and only during actual calls
+    if (isInCall && isMobile) {
+      setShowControls(!showControls)
+      
+      if (controlsTimeoutId) {
+        clearTimeout(controlsTimeoutId)
+        setControlsTimeoutId(null)
+      }
+      
+      if (!showControls) {
+        // If showing controls, start the timeout to hide them again
+        startControlsTimeout()
+      }
+    }
+  }
+
+  // Start controls timeout when call starts or status changes
+  useEffect(() => {
+    if (isInCall && isMobile) {
+      // Only start auto-hide timeout during actual calls on mobile
+      setShowControls(true)
+      startControlsTimeout()
+    } else {
+      // For all other states (searching, matched, etc.), always show controls
+      setShowControls(true)
+      if (controlsTimeoutId) {
+        clearTimeout(controlsTimeoutId)
+        setControlsTimeoutId(null)
+      }
+    }
+    
+    return () => {
+      if (controlsTimeoutId) {
+        clearTimeout(controlsTimeoutId)
+      }
+    }
+  }, [isInCall, connectionStatus, isMobile])
+
+  // Reset timeout when user interacts with controls (mobile only)
+  const resetControlsTimeout = () => {
+    if (isMobile) {
+      if (controlsTimeoutId) {
+        clearTimeout(controlsTimeoutId)
+      }
+      setShowControls(true)
+      startControlsTimeout()
+    }
+  }
 
   const cleanup = () => {
     if (wsRef.current) {
@@ -927,15 +1025,85 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white overflow-hidden">
-      {/* Ambient Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 via-purple-900/10 to-slate-900/30"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(59,130,246,0.15),transparent_50%)]"></div>
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(147,51,234,0.1),transparent_50%)]"></div>
+    <div className="flex flex-col h-screen bg-slate-950 text-white overflow-hidden relative">
+      <style jsx>{`
+        .smooth-transition {
+          transition: top 0.3s ease-out, left 0.3s ease-out;
+        }
+        
+        @keyframes float {
+          0%, 100% { transform: translateY(0px) scale(1); }
+          50% { transform: translateY(-20px) scale(1.05); }
+        }
+        
+        @keyframes glow {
+          0%, 100% { opacity: 0.3; }
+          50% { opacity: 0.8; }
+        }
+        
+        @keyframes professional-spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes pulse-ring {
+          0% { transform: scale(0.8); opacity: 1; }
+          100% { transform: scale(1.4); opacity: 0; }
+        }
+        
+        .animate-float {
+          animation: float 6s ease-in-out infinite;
+        }
+        
+        .animate-glow {
+          animation: glow 4s ease-in-out infinite;
+        }
+        
+        .animate-professional-spin {
+          animation: professional-spin 2s linear infinite;
+        }
+        
+        .animate-pulse-ring {
+          animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+      `}</style>
+      
+      {/* Premium Multi-layered Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950"></div>
+      <div className="absolute inset-0 bg-gradient-to-tr from-indigo-950/40 via-transparent to-violet-950/30"></div>
+      <div className="absolute inset-0 bg-gradient-to-bl from-transparent via-slate-950/80 to-teal-950/20"></div>
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-slate-900/20 via-transparent to-transparent"></div>
+      
+      {/* Premium Animated Background Elements */}
+      <div className="absolute inset-0 overflow-hidden">
+        {/* Large ambient orbs */}
+        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-gradient-to-br from-blue-500/8 to-indigo-600/4 rounded-full blur-3xl animate-float"></div>
+        <div className="absolute bottom-1/3 right-1/4 w-[400px] h-[400px] bg-gradient-to-tl from-violet-500/6 to-purple-600/3 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }}></div>
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[300px] h-[300px] bg-gradient-to-r from-teal-500/4 to-cyan-500/2 rounded-full blur-2xl animate-float" style={{ animationDelay: '4s' }}></div>
+        
+        {/* Smaller floating particles */}
+        <div className="absolute top-1/5 right-1/3 w-20 h-20 bg-blue-400/5 rounded-full blur-xl animate-glow"></div>
+        <div className="absolute bottom-1/5 left-1/3 w-16 h-16 bg-violet-400/4 rounded-full blur-lg animate-glow" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute top-2/3 right-1/5 w-12 h-12 bg-teal-400/3 rounded-full blur-md animate-glow" style={{ animationDelay: '3s' }}></div>
+      </div>
+      
+      {/* Subtle Mesh Pattern */}
+      <div className="absolute inset-0 opacity-[0.02]" style={{
+        backgroundImage: `
+          linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)
+        `,
+        backgroundSize: '30px 30px'
+      }}></div>
+      
+      {/* Premium noise texture */}
+      <div className="absolute inset-0 opacity-[0.015] mix-blend-soft-light" style={{
+        backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`
+      }}></div>
 
-      {/* Header Section */}
+      {/* Header Section - Premium Design */}
       <header
-        className={`relative z-50 backdrop-blur-xl bg-slate-900/80 border-b border-slate-700/50 transition-all duration-300 ${
+        className={`relative z-50 backdrop-blur-2xl bg-slate-950/95 border-b border-slate-800/50 transition-all duration-300 ${
           isInCall ? "hidden md:block" : ""
         }`}
       >
@@ -943,38 +1111,38 @@ export default function VideoChat({ onBack }: VideoChatProps) {
           <div className="flex items-center space-x-4">
             <button
               onClick={onBack}
-              className="group p-2.5 rounded-xl bg-slate-800/50 hover:bg-slate-700/50 border border-slate-600/30 hover:border-slate-500/50 transition-all duration-200 hover:scale-105"
+              className="group p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-800/90 border border-slate-700/50 hover:border-slate-600/70 transition-all duration-200 hover:scale-105 shadow-xl backdrop-blur-sm"
             >
               <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-white transition-colors" />
             </button>
             <div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-300 bg-clip-text text-transparent">
+              <h1 className="text-xl font-bold bg-gradient-to-r from-white via-blue-100 to-violet-100 bg-clip-text text-transparent">
                 Video Chat
               </h1>
-              <p className="text-xs text-slate-400 mt-0.5">Connect with people worldwide</p>
+              <p className="text-xs text-slate-500 mt-0.5">Connect with people worldwide</p>
             </div>
           </div>
           <div className="flex items-center space-x-3">
             <div
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200 ${
+              className={`px-4 py-2 rounded-full text-xs font-medium border backdrop-blur-xl transition-all duration-200 ${
                 connectionStatus === "connected"
-                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/30 shadow-emerald-500/20 shadow-sm"
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-emerald-500/20 shadow-lg"
                   : connectionStatus === "searching"
-                    ? "bg-amber-500/20 text-amber-300 border-amber-500/30 shadow-amber-500/20 shadow-sm animate-pulse"
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/20 shadow-lg animate-pulse"
                     : connectionStatus === "in-call"
-                      ? "bg-blue-500/20 text-blue-300 border-blue-500/30 shadow-blue-500/20 shadow-sm"
-                      : "bg-slate-500/20 text-slate-400 border-slate-500/30"
+                      ? "bg-blue-500/20 text-blue-300 border-blue-500/40 shadow-blue-500/20 shadow-lg"
+                      : "bg-slate-500/20 text-slate-400 border-slate-500/40"
               }`}
             >
-              <div className="flex items-center space-x-1.5">
+              <div className="flex items-center space-x-2">
                 <div
-                  className={`w-1.5 h-1.5 rounded-full ${
+                  className={`w-2 h-2 rounded-full ${
                     connectionStatus === "connected"
-                      ? "bg-emerald-400"
+                      ? "bg-emerald-400 shadow-emerald-400/50 shadow-sm"
                       : connectionStatus === "searching"
-                        ? "bg-amber-400 animate-pulse"
+                        ? "bg-amber-400 animate-pulse shadow-amber-400/50 shadow-sm"
                         : connectionStatus === "in-call"
-                          ? "bg-blue-400"
+                          ? "bg-blue-400 shadow-blue-400/50 shadow-sm"
                           : "bg-slate-400"
                   }`}
                 ></div>
@@ -985,74 +1153,143 @@ export default function VideoChat({ onBack }: VideoChatProps) {
         </div>
       </header>
 
-      {/* Video Section - Takes remaining space */}
-      <div ref={videoContainerRef} className="flex-1 relative bg-slate-900 overflow-hidden">
-        {/* Remote Video */}
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover md:object-contain transition-opacity duration-500"
-          style={{ display: isInCall ? "block" : "none" }}
-        />
 
-        {/* Local Video - Enhanced styling */}
+      <div ref={videoContainerRef} className="flex-1 relative bg-slate-950 overflow-hidden" onClick={handleScreenClick}>
+   
+        <div 
+          className="absolute inset-0"
+          style={{ 
+            display: isInCall ? "block" : "none"
+          }}
+        >
+          <div 
+            className="absolute inset-0 overflow-hidden md:rounded-3xl"
+            style={{
+              clipPath: screenWidth > 768 ? 'inset(0 round 24px)' : 'none'
+            }}
+          >
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              muted={false}
+              controls={false}
+              disablePictureInPicture
+              controlsList="nodownload nofullscreen noremoteplaybook"
+              className="absolute inset-0 w-full h-full object-cover md:object-contain transition-opacity duration-500 bg-transparent"
+              style={{ 
+                background: "transparent"
+              }}
+              onContextMenu={(e) => e.preventDefault()}
+            />
+          </div>
+        </div>
+
+        {/* Local Video - Premium Glass Design */}
         <div
           ref={localVideoContainerRef}
-          className="absolute bg-slate-800/90 backdrop-blur-sm rounded-2xl overflow-hidden border-2 border-slate-600/40 shadow-2xl z-10 touch-none cursor-move smooth-transition hover:border-slate-500/60 hover:shadow-slate-900/50"
+          className="absolute z-[100] touch-none cursor-move transition-all duration-300 group will-change-transform"
           style={{
             width: isMobile ? "100px" : "192px",
             height: isMobile ? "133px" : "144px",
             top: `${localVideoPosition.y}px`,
             left: `${localVideoPosition.x}px`,
             display: isInCall || connectionStatus === "searching" || connectionStatus === "matched" ? "block" : "none",
-            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.05)",
+            background: "transparent",
+            transform: isDragging ? "scale(1.05)" : "scale(1)",
+            transition: isDragging ? 
+              "transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)" : 
+              "top 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), left 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)"
           }}
           onMouseDown={handleMouseDown}
           onTouchStart={handleTouchStart}
+          onClick={(e) => e.stopPropagation()}
         >
-          <video ref={localVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-          {!isVideoEnabled && (
-            <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center">
-              <div className="text-center">
-                <VideoOff className="w-6 h-6 text-slate-400 mx-auto mb-1" />
-                <span className="text-xs text-slate-400">Camera off</span>
+          {/* Glass container with premium styling */}
+          <div className="relative w-full h-full bg-slate-950/95 backdrop-blur-2xl rounded-3xl overflow-hidden border border-slate-700/60 shadow-2xl group-hover:border-slate-600/80 group-hover:shadow-slate-900/80 transition-all duration-300">
+            {/* Premium glass effect */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent"></div>
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/20 via-transparent to-white/5"></div>
+            
+            <video 
+              ref={localVideoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              controls={false}
+              disablePictureInPicture
+              controlsList="nodownload nofullscreen noremoteplayback"
+              className="relative z-10 w-full h-full object-cover bg-transparent" 
+              style={{ background: "transparent" }}
+              onContextMenu={(e) => e.preventDefault()}
+            />
+            
+            {!isVideoEnabled && (
+              <div className="absolute inset-0 z-20 bg-slate-950/98 backdrop-blur-sm flex items-center justify-center">
+                <div className="text-center">
+                  <VideoOff className="w-6 h-6 text-slate-400 mx-auto mb-2" />
+                  <span className="text-xs text-slate-400 font-medium">Camera off</span>
+                </div>
               </div>
+            )}
+            
+            {/* Premium drag indicator */}
+            <div className="absolute top-3 right-3 flex space-x-1 z-30">
+              <div className="w-1.5 h-1.5 bg-white/30 rounded-full shadow-sm"></div>
+              <div className="w-1.5 h-1.5 bg-white/30 rounded-full shadow-sm"></div>
+              <div className="w-1.5 h-1.5 bg-white/30 rounded-full shadow-sm"></div>
             </div>
-          )}
-          {/* Drag indicator */}
-          <div className="absolute top-2 right-2 w-1 h-1 bg-white/30 rounded-full"></div>
-          <div className="absolute top-2 right-4 w-1 h-1 bg-white/30 rounded-full"></div>
-          <div className="absolute top-2 right-6 w-1 h-1 bg-white/30 rounded-full"></div>
+          </div>
         </div>
 
-        {/* Status Overlay - Enhanced design */}
+        {/* Status Overlay - Premium Design */}
         {!isInCall && (
-          <div className="absolute inset-0 flex items-center justify-center">
+          <div className="absolute inset-0 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
             <div className="text-center max-w-md mx-auto p-8 relative">
-              {/* Animated background glow */}
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-purple-500/10 to-pink-500/10 rounded-3xl blur-xl"></div>
+              {/* Premium animated background glow */}
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-violet-500/8 to-teal-500/6 rounded-3xl blur-2xl animate-glow"></div>
+              <div className="absolute inset-2 bg-gradient-to-br from-slate-900/30 via-transparent to-slate-800/20 rounded-3xl backdrop-blur-sm"></div>
 
-              <div className="relative">
-                <div className="w-28 h-28 mx-auto mb-8 rounded-full bg-gradient-to-br from-slate-700/50 to-slate-800/50 flex items-center justify-center border border-slate-600/30 shadow-2xl backdrop-blur-sm aspect-square">
+              <div className="relative z-10">
+                <div className="w-32 h-32 mx-auto mb-8 rounded-3xl bg-gradient-to-br from-slate-800/60 via-slate-900/80 to-slate-950/90 flex items-center justify-center border border-slate-700/40 shadow-2xl backdrop-blur-xl aspect-square relative overflow-hidden">
+                  {/* Premium glass effect on icon container */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent"></div>
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900/30 via-transparent to-white/3"></div>
+                  
                   {connectionStatus === "searching" ? (
-                    <div className="relative flex items-center justify-center w-full h-full">
-                      <Search className="w-14 h-14 text-blue-400 z-10" />
-                      <div className="absolute inset-0 rounded-full animate-spin">
-                        <div className="w-full h-full rounded-full border border-transparent border-t-blue-400 opacity-60"></div>
+                    <div className="relative flex items-center justify-center w-full h-full z-10">
+                      <Search className="w-16 h-16 text-blue-400 drop-shadow-lg" />
+                      
+                      {/* Professional spinner rings */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        {/* Outer ring */}
+                        <div className="w-24 h-24 rounded-full border-2 border-transparent border-t-blue-400/60 border-r-blue-400/30 animate-professional-spin"></div>
+                        {/* Middle ring */}
+                        <div className="absolute w-20 h-20 rounded-full border-2 border-transparent border-t-blue-300/40 border-r-blue-300/20 animate-professional-spin" style={{ animationDirection: 'reverse', animationDuration: '3s' }}></div>
+                        {/* Inner ring */}
+                        <div className="absolute w-16 h-16 rounded-full border border-transparent border-t-blue-200/30 animate-professional-spin" style={{ animationDuration: '1.5s' }}></div>
+                      </div>
+                      
+                      {/* Pulse rings */}
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-28 h-28 rounded-full border border-blue-400/20 animate-pulse-ring"></div>
+                        <div className="absolute w-28 h-28 rounded-full border border-blue-300/15 animate-pulse-ring" style={{ animationDelay: '1s' }}></div>
                       </div>
                     </div>
                   ) : connectionStatus === "matched" ? (
-                    <div className="relative">
-                      <Users className="w-14 h-14 text-emerald-400" />
-                      <div className="absolute -inset-2 rounded-full border border-emerald-400/30 animate-ping"></div>
+                    <div className="relative z-10">
+                      <Users className="w-16 h-16 text-emerald-400 drop-shadow-lg" />
+                      <div className="absolute -inset-3 rounded-2xl border-2 border-emerald-400/20 animate-ping"></div>
+                      <div className="absolute -inset-6 rounded-3xl border border-emerald-400/10 animate-ping" style={{ animationDelay: '0.5s' }}></div>
                     </div>
                   ) : (
-                    <Video className="w-14 h-14 text-slate-300" />
+                    <div className="relative z-10">
+                      <Video className="w-16 h-16 text-slate-300 drop-shadow-lg" />
+                    </div>
                   )}
                 </div>
 
-                <h2 className="text-3xl font-bold mb-3 bg-gradient-to-r from-white via-slate-200 to-slate-300 bg-clip-text text-transparent">
+                <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-white via-slate-200 to-slate-300 bg-clip-text text-transparent drop-shadow-sm">
                   {connectionStatus === "disconnected"
                     ? "Ready to Connect"
                     : connectionStatus === "connecting"
@@ -1066,63 +1303,61 @@ export default function VideoChat({ onBack }: VideoChatProps) {
                             : "Video Chat"}
                 </h2>
 
-                <p className="text-slate-400 mb-8 leading-relaxed">
+                <p className="text-slate-400 mb-8 leading-relaxed text-sm">
                   {statusMessage || "Connect to start a random video chat with people from around the world"}
                 </p>
 
                 {error && (
-                  <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-300 text-sm backdrop-blur-sm">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 bg-red-400 rounded-full"></div>
+                  <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-300 text-sm backdrop-blur-xl relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-r from-red-500/5 to-transparent"></div>
+                    <div className="flex items-center space-x-2 relative z-10">
+                      <div className="w-2 h-2 bg-red-400 rounded-full shadow-red-400/50 shadow-sm"></div>
                       <span>{error}</span>
                     </div>
                   </div>
                 )}
 
-                {/* Action Buttons - Enhanced styling */}
+                {/* Premium Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-4 justify-center">
                   {connectionStatus === "disconnected" && (
                     <button
                       onClick={connectToServer}
-                      className="group px-8 py-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-xl font-semibold transition-all duration-200 flex items-center justify-center space-x-3 shadow-lg hover:shadow-blue-500/25 hover:scale-105 border border-blue-500/20"
+                      className="group px-8 py-4 bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 hover:from-blue-500 hover:via-blue-600 hover:to-indigo-600 text-white rounded-2xl font-semibold transition-all duration-300 flex items-center justify-center space-x-3 shadow-xl hover:shadow-blue-500/25 hover:scale-105 border border-blue-500/20 backdrop-blur-sm relative overflow-hidden"
                     >
-                      <Video className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                      <span>Connect to Server</span>
+                      <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                      <Video className="w-5 h-5 group-hover:scale-110 transition-transform relative z-10" />
+                      <span className="relative z-10">Connect to Server</span>
                     </button>
                   )}
 
                   {connectionStatus === "connected" && (
-                    <>
-                      <button
-                        onClick={findMatch}
-                        disabled={isProcessing}
-                        className={`group px-8 py-4 rounded-xl font-semibold transition-all duration-200 flex items-center justify-center space-x-3 shadow-lg border ${
-                          isProcessing
-                            ? "bg-slate-600/50 text-slate-400 cursor-not-allowed border-slate-600/30"
-                            : "bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white hover:shadow-emerald-500/25 hover:scale-105 border-emerald-500/20"
-                        }`}
-                      >
-                        <Search
-                          className={`w-5 h-5 ${isProcessing ? "animate-spin" : "group-hover:scale-110"} transition-transform`}
-                        />
-                        <span>{isProcessing ? "Processing..." : "Find Match"}</span>
-                      </button>
-                      <button
-                        onClick={disconnect}
-                        className="group px-8 py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl font-semibold transition-all duration-200 shadow-lg hover:shadow-red-500/25 hover:scale-105 border border-red-500/20"
-                      >
-                        <span>Disconnect</span>
-                      </button>
-                    </>
+                    <button
+                      onClick={findMatch}
+                      disabled={isProcessing}
+                      className={`group px-8 py-4 font-semibold transition-all duration-300 flex items-center justify-center space-x-3 shadow-xl border backdrop-blur-sm relative overflow-hidden rounded-2xl ${
+                        isProcessing
+                          ? "bg-slate-600/50 text-slate-400 cursor-not-allowed border-slate-600/30"
+                          : "bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 hover:from-emerald-500 hover:via-emerald-600 hover:to-teal-600 text-white hover:shadow-emerald-500/25 hover:scale-105 border-emerald-500/20"
+                      }`}
+                    >
+                      {!isProcessing && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                      )}
+                      <Search
+                        className={`w-5 h-5 ${isProcessing ? "animate-spin" : "group-hover:scale-110"} transition-transform relative z-10`}
+                      />
+                      <span className="relative z-10">{isProcessing ? "Processing..." : "Find Match"}</span>
+                    </button>
                   )}
 
                   {connectionStatus === "searching" && (
                     <button
                       onClick={cancelSearch}
-                      className="group px-8 py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white rounded-xl font-semibold transition-all duration-200 flex items-center justify-center space-x-3 shadow-lg hover:shadow-red-500/25 hover:scale-105 border border-red-500/20"
+                      className="group px-8 py-4 bg-gradient-to-r from-red-600 via-red-700 to-rose-700 hover:from-red-500 hover:via-red-600 hover:to-rose-600 text-white rounded-2xl font-semibold transition-all duration-300 flex items-center justify-center space-x-3 shadow-xl hover:shadow-red-500/25 hover:scale-105 border border-red-500/20 backdrop-blur-sm relative overflow-hidden"
                     >
-                      <X className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                      <span>Cancel Search</span>
+                      <div className="absolute inset-0 bg-gradient-to-r from-white/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                      <X className="w-5 h-5 group-hover:scale-110 transition-transform relative z-10" />
+                      <span className="relative z-10">Cancel Search</span>
                     </button>
                   )}
                 </div>
@@ -1132,47 +1367,66 @@ export default function VideoChat({ onBack }: VideoChatProps) {
         )}
       </div>
 
-      {/* Controls Section - Enhanced design */}
-      {(connectionStatus === "searching" || connectionStatus === "matched" || isInCall) && (
-        <div className="relative z-50 backdrop-blur-xl bg-slate-900/90 border-t border-slate-700/50 pb-safe">
-          <div className="p-6">
+      {/* Premium Controls Section */}
+      {(connectionStatus === "searching" || connectionStatus === "matched" || isInCall) && 
+       (!isMobile || showControls) && (
+        <div className="relative z-50 backdrop-blur-2xl bg-slate-950/95 border-t border-slate-800/50 pb-safe transition-all duration-300">
+          {/* Premium gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-transparent"></div>
+          
+          <div className="p-6 relative z-10">
             <div className="flex items-center justify-center space-x-6 max-w-md mx-auto">
               <button
-                onClick={toggleAudio}
-                className={`group p-4 rounded-2xl transition-all duration-200 shadow-lg hover:scale-105 border ${
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleAudio()
+                  resetControlsTimeout()
+                }}
+                className={`group p-4 rounded-2xl transition-all duration-300 shadow-xl hover:scale-105 border backdrop-blur-sm relative overflow-hidden ${
                   isAudioEnabled
-                    ? "bg-slate-700/50 hover:bg-slate-600/50 text-white border-slate-600/30 hover:border-slate-500/50"
-                    : "bg-red-600/90 hover:bg-red-500/90 text-white border-red-500/30 shadow-red-500/20"
+                    ? "bg-slate-800/60 hover:bg-slate-700/70 text-white border-slate-600/40 hover:border-slate-500/60"
+                    : "bg-red-600/90 hover:bg-red-500/95 text-white border-red-500/40 shadow-red-500/20"
                 }`}
               >
+                <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 {isAudioEnabled ? (
-                  <Mic className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                  <Mic className="w-6 h-6 group-hover:scale-110 transition-transform relative z-10" />
                 ) : (
-                  <MicOff className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                  <MicOff className="w-6 h-6 group-hover:scale-110 transition-transform relative z-10" />
                 )}
               </button>
 
               <button
-                onClick={toggleVideo}
-                className={`group p-4 rounded-2xl transition-all duration-200 shadow-lg hover:scale-105 border ${
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleVideo()
+                  resetControlsTimeout()
+                }}
+                className={`group p-4 rounded-2xl transition-all duration-300 shadow-xl hover:scale-105 border backdrop-blur-sm relative overflow-hidden ${
                   isVideoEnabled
-                    ? "bg-slate-700/50 hover:bg-slate-600/50 text-white border-slate-600/30 hover:border-slate-500/50"
-                    : "bg-red-600/90 hover:bg-red-500/90 text-white border-red-500/30 shadow-red-500/20"
+                    ? "bg-slate-800/60 hover:bg-slate-700/70 text-white border-slate-600/40 hover:border-slate-500/60"
+                    : "bg-red-600/90 hover:bg-red-500/95 text-white border-red-500/40 shadow-red-500/20"
                 }`}
               >
+                <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 {isVideoEnabled ? (
-                  <Video className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                  <Video className="w-6 h-6 group-hover:scale-110 transition-transform relative z-10" />
                 ) : (
-                  <VideoOff className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                  <VideoOff className="w-6 h-6 group-hover:scale-110 transition-transform relative z-10" />
                 )}
               </button>
 
               {(connectionStatus === "matched" || isInCall) && (
                 <button
-                  onClick={leaveCall}
-                  className="group p-4 rounded-2xl bg-red-600/90 hover:bg-red-500/90 text-white transition-all duration-200 shadow-lg hover:scale-105 border border-red-500/30 shadow-red-500/20"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    leaveCall()
+                    resetControlsTimeout()
+                  }}
+                  className="group p-4 rounded-2xl bg-red-600/90 hover:bg-red-500/95 text-white transition-all duration-300 shadow-xl hover:scale-105 border border-red-500/40 shadow-red-500/20 backdrop-blur-sm relative overflow-hidden"
                 >
-                  <PhoneOff className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                  <PhoneOff className="w-6 h-6 group-hover:scale-110 transition-transform relative z-10" />
                 </button>
               )}
             </div>

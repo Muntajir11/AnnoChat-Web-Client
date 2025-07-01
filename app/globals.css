@@ -110,10 +110,15 @@ body {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 20px rgba(59, 130, 246, 0.3);
 }
 
+/* Ensure video elements respect parent container rounded corners */
+video {
+  border-radius: inherit;
+}
+
 /* Mobile-specific styles */
 @media (max-width: 768px) {
-  /* Ensure full screen video on mobile */
-  video[class*="object-contain"] {
+  /* Ensure full screen video on mobile - only for remote video */
+  .video-container > video[class*="object-cover"] {
     object-fit: cover !important;
     width: 100vw !important;
     height: 100vh !important;
