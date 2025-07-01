@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ArrowRight, MessageSquare, Shield, Users, X, Smartphone, Download, Sparkles, Zap } from "lucide-react"
+import { ArrowRight, MessageSquare, Shield, Users, X, Smartphone, Download, Sparkles, Zap, Video } from "lucide-react"
 import RandomChat from "./random-chat"
+import VideoChat from "./video-chat"
 
 export default function HomePage() {
   const [startChat, setStartChat] = useState(false)
+  const [startVideoChat, setStartVideoChat] = useState(false)
   const [showRules, setShowRules] = useState(false)
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
   const [floatingElements, setFloatingElements] = useState<Array<{
@@ -50,6 +52,10 @@ export default function HomePage() {
 
   if (startChat) {
     return <RandomChat onBack={() => setStartChat(false)} />
+  }
+
+  if (startVideoChat) {
+    return <VideoChat onBack={() => setStartVideoChat(false)} />
   }
 
   return (
@@ -175,8 +181,17 @@ export default function HomePage() {
                 className="group relative bg-white text-black px-8 py-4 rounded-2xl text-lg font-semibold transition-all duration-300 flex items-center hover:bg-neutral-100 transform hover:scale-[1.02] overflow-hidden shadow-xl hover:shadow-white/20"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                <Zap className="w-5 h-5 mr-3 relative z-10" />
-                <span className="relative z-10">Start Random Chat</span>
+                <MessageSquare className="w-5 h-5 mr-3 relative z-10" />
+                <span className="relative z-10">Start Text Chat</span>
+                <ArrowRight className="ml-3 w-5 h-5 relative z-10 group-hover:translate-x-1 transition-transform" />
+              </button>
+              <button
+                onClick={() => setStartVideoChat(true)}
+                className="group relative bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-4 rounded-2xl text-lg font-semibold transition-all duration-300 flex items-center transform hover:scale-[1.02] overflow-hidden shadow-xl hover:shadow-blue-500/20"
+              >
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <Video className="w-5 h-5 mr-3 relative z-10" />
+                <span className="relative z-10">Start Video Chat</span>
                 <ArrowRight className="ml-3 w-5 h-5 relative z-10 group-hover:translate-x-1 transition-transform" />
               </button>
               <button

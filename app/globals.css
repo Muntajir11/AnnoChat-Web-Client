@@ -16,7 +16,6 @@ body {
   width: 100%;
   margin: 0;
   padding: 0;
-  /* overflow: hidden; */
 }
 
 * {
@@ -88,4 +87,103 @@ body {
   .xs\:hidden {
     display: none;
   }
+}
+
+/* Mobile safe area support */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 1rem);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 1rem);
+}
+
+/* Enhanced local video container - draggable on all devices */
+.smooth-transition {
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), top 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s
+    cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Enhanced visual feedback when dragging */
+.smooth-transition:active {
+  transform: scale(1.05);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1), 0 0 20px rgba(59, 130, 246, 0.3);
+}
+
+/* Ensure video elements respect parent container rounded corners */
+video {
+  border-radius: inherit;
+}
+
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+  /* Ensure full screen video on mobile - only for remote video */
+  .video-container > video[class*="object-cover"] {
+    object-fit: cover !important;
+    width: 100vw !important;
+    height: 100vh !important;
+  }
+
+  /* Touch-friendly controls */
+  button {
+    min-height: 48px;
+    min-width: 48px;
+  }
+
+  /* Prevent zoom on touch */
+  .smooth-transition {
+    touch-action: manipulation;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Enhanced button hover effects */
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 5px rgba(59, 130, 246, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.6);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+/* Smooth gradient animations */
+@keyframes gradient-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+/* Status indicator animations */
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+.animate-status-pulse {
+  animation: status-pulse 2s ease-in-out infinite;
 }
