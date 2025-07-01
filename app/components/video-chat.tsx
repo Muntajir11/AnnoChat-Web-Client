@@ -5,8 +5,7 @@ import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { ArrowLeft, Video, VideoOff, Mic, MicOff, PhoneOff, Users, Search, X } from "lucide-react"
 
-const WEBSOCKET_URL =
-  process.env.NODE_ENV === "production" ? "wss://annochat.social/video" : "ws://localhost:5000/video"
+const WEBSOCKET_URL = "wss://annochat.social/video"
 
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
@@ -65,10 +64,6 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   // Call timer state
   const [callDuration, setCallDuration] = useState(0)
   const callTimerRef = useRef<NodeJS.Timeout | null>(null)
-
-  // Debug state
-  // const [debugMode, setDebugMode] = useState(false)
-  // const [cameraTestResults, setCameraTestResults] = useState<any[]>([])
 
   useEffect(() => {
     // Initialize screen width on client side
@@ -565,7 +560,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
         break
 
       default:
-        console.log("Unknown server message:", event, data)
+        // Unknown server message - silently ignored in production
     }
   }
 
@@ -621,7 +616,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
             googAudioMirroring: false,
           })
         } catch (constraintError) {
-          console.log("Advanced audio constraints not supported, using standard constraints")
+          // Advanced audio constraints not supported, using standard constraints
         }
         streamAudioTrack.enabled = isAudioEnabled
       }
@@ -940,9 +935,6 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     setStatusMessage("")
     setError("")
   }
-
-  // Camera diagnostics and frame rate testing (removed for production)
-  // const testCameraCapabilities = async (videoTrack: MediaStreamTrack) => { ... }
 
   // Monitor video stats for debugging
   useEffect(() => {
