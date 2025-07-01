@@ -62,6 +62,10 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   const audioAnalyserRef = useRef<AnalyserNode | null>(null)
   const audioLevelIntervalRef = useRef<number | null>(null)
 
+  // Call timer state
+  const [callDuration, setCallDuration] = useState(0)
+  const callTimerRef = useRef<NodeJS.Timeout | null>(null)
+
   // Debug state
   // const [debugMode, setDebugMode] = useState(false)
   // const [cameraTestResults, setCameraTestResults] = useState<any[]>([])
@@ -353,6 +357,38 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     }
   }, [isInCall, connectionStatus, isMobile])
 
+  // Call timer effect
+  useEffect(() => {
+    if (isInCall) {
+      // Start timer when call begins
+      setCallDuration(0)
+      callTimerRef.current = setInterval(() => {
+        setCallDuration(prev => prev + 1)
+      }, 1000)
+    } else {
+      // Stop and reset timer when call ends
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current)
+        callTimerRef.current = null
+      }
+      setCallDuration(0)
+    }
+
+    return () => {
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current)
+        callTimerRef.current = null
+      }
+    }
+  }, [isInCall])
+
+  // Format call duration to MM:SS
+  const formatCallDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
   // Reset timeout when user interacts with controls (mobile only)
   const resetControlsTimeout = () => {
     if (isMobile) {
@@ -389,6 +425,13 @@ export default function VideoChat({ onBack }: VideoChatProps) {
 
     // Stop audio level monitoring
     stopAudioLevelMonitoring()
+
+    // Stop call timer
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current)
+      callTimerRef.current = null
+    }
+    setCallDuration(0)
 
     setIsVideoEnabled(true)
     setIsAudioEnabled(true)
@@ -1031,6 +1074,23 @@ export default function VideoChat({ onBack }: VideoChatProps) {
           transition: top 0.3s ease-out, left 0.3s ease-out;
         }
         
+        /* Hide any drag indicators or pseudo-elements that might create dots */
+        .cursor-move::before,
+        .cursor-move::after,
+        .cursor-move *::before,
+        .cursor-move *::after {
+          display: none !important;
+        }
+        
+        /* Ensure no drag visual feedback */
+        .cursor-move {
+          -webkit-user-drag: none;
+          -khtml-user-drag: none;
+          -moz-user-drag: none;
+          -o-user-drag: none;
+          user-drag: none;
+        }
+        
         @keyframes float {
           0%, 100% { transform: translateY(0px) scale(1); }
           50% { transform: translateY(-20px) scale(1.05); }
@@ -1155,6 +1215,17 @@ export default function VideoChat({ onBack }: VideoChatProps) {
 
 
       <div ref={videoContainerRef} className="flex-1 relative bg-slate-950 overflow-hidden" onClick={handleScreenClick}>
+        
+        {/* Call Timer */}
+        {isInCall && (
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-50">
+            <div className="px-4 py-2 bg-slate-950/90 backdrop-blur-xl rounded-full border border-slate-700/50 shadow-xl">
+              <span className="text-white font-mono text-sm font-medium tracking-wider">
+                {formatCallDuration(callDuration)}
+              </span>
+            </div>
+          </div>
+        )}
    
         <div 
           className="absolute inset-0"
@@ -1232,13 +1303,6 @@ export default function VideoChat({ onBack }: VideoChatProps) {
                 </div>
               </div>
             )}
-            
-            {/* Premium drag indicator */}
-            <div className="absolute top-3 right-3 flex space-x-1 z-30">
-              <div className="w-1.5 h-1.5 bg-white/30 rounded-full shadow-sm"></div>
-              <div className="w-1.5 h-1.5 bg-white/30 rounded-full shadow-sm"></div>
-              <div className="w-1.5 h-1.5 bg-white/30 rounded-full shadow-sm"></div>
-            </div>
           </div>
         </div>
 
