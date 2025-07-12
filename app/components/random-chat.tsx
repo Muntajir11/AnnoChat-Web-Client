@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, type FormEvent } from "react"
 import { Send, Users, RefreshCw, XCircle, ArrowLeft } from "lucide-react"
+import config from "../lib/config"
 
 export default function RandomChat({ onBack }: { onBack?: () => void }) {
   const [messages, setMessages] = useState<{ text: string; sender: "you" | "stranger" }[]>([])
@@ -19,8 +20,8 @@ export default function RandomChat({ onBack }: { onBack?: () => void }) {
   const presenceConnectingRef = useRef(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const authTokenFetchedRef = useRef(false)
-  const PRESENCE_URL = "wss://muntajir.me/presence"
-  const CHAT_URL = authToken ? `wss://muntajir.me/?token=${authToken}` : null
+  const PRESENCE_URL = config.presenceUrl
+  const CHAT_URL = authToken ? `${config.websocketUrl}/?token=${authToken}` : null
 
     useEffect(() => {
     async function fetchAuthToken() {

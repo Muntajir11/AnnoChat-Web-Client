@@ -10,12 +10,62 @@
   }
 }
 
+/* Global prevention of pull-to-refresh and zoom */
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
 html,
 body {
   height: var(--vh);
   width: 100%;
   margin: 0;
   padding: 0;
+  overscroll-behavior: none;
+  -webkit-overscroll-behavior: none;
+}
+
+/* Video call active state - complete protection */
+body.video-call-active {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  touch-action: manipulation !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  overscroll-behavior: none !important;
+  -webkit-overscroll-behavior: none !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+/* Prevent zoom on all video call elements */
+body.video-call-active * {
+  touch-action: manipulation !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  -ms-user-select: none !important;
+  user-select: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  -webkit-user-drag: none !important;
+}
+
+/* Allow dragging only for video elements */
+body.video-call-active .cursor-move {
+  touch-action: manipulation !important;
+  -webkit-user-drag: none !important;
 }
 
 * {
@@ -137,6 +187,43 @@ video {
     -webkit-user-select: none;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Prevent mobile browser UI bouncing during video calls */
+  .video-call-active {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    height: 100vh !important;
+    height: calc(var(--vh, 1vh) * 100) !important;
+    width: 100vw !important;
+    overflow: hidden !important;
+    overscroll-behavior: none !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Prevent zoom and unwanted touch behaviors */
+  .video-call-active * {
+    touch-action: manipulation !important;
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+  }
+
+  /* iOS Safari specific fixes */
+  @supports (-webkit-touch-callout: none) {
+    .video-call-active {
+      height: -webkit-fill-available !important;
+    }
+  }
+}
+
+/* Prevent double-tap zoom globally on mobile */
+@media (max-width: 768px) {
+  * {
+    touch-action: manipulation;
   }
 }
 

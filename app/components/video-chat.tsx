@@ -4,8 +4,9 @@ import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
 import { ArrowLeft, Video, VideoOff, Mic, MicOff, PhoneOff, Users, Search, X } from "lucide-react"
+import config from "../lib/config"
 
-const WEBSOCKET_URL = "wss://muntajir.me/video"
+const WEBSOCKET_URL = config.videoUrl
 
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
@@ -35,10 +36,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [isMobile, setIsMobile] = useState(false)
 
-  // Controls auto-hide functionality
-  const [showControls, setShowControls] = useState(true)
-  const [controlsTimeoutId, setControlsTimeoutId] = useState<NodeJS.Timeout | null>(null)
-  
+
   // Track screen size for dynamic border radius
   const [screenWidth, setScreenWidth] = useState(768)
 
@@ -66,47 +64,143 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   const callTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
-    // Initialize screen width on client side
     if (typeof window !== 'undefined') {
       setScreenWidth(window.innerWidth)
     }
     
     return () => {
       cleanup()
-      if (controlsTimeoutId) {
-        clearTimeout(controlsTimeoutId)
-      }
     }
   }, [])
 
-  // Calculate safe position based on current state and screen size
+  // Handle mobile viewport and prevent scrolling during video calls
+  useEffect(() => {
+    if (isInCall && isMobile) {
+      // Apply CSS class to body for video call mode
+      document.body.classList.add('video-call-active')
+      
+      // Prevent scrolling and fix viewport on mobile during calls
+      const originalOverflow = document.body.style.overflow
+      const originalPosition = document.body.style.position
+      const originalHeight = document.body.style.height
+      const originalWidth = document.body.style.width
+      const originalTouchAction = document.body.style.touchAction
+      
+      // Lock the body and prevent any scrolling
+      document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.height = '100%'
+      document.body.style.width = '100%'
+      document.body.style.touchAction = 'manipulation'
+      
+      // Prevent zoom and pull-to-refresh - viewport meta is handled globally
+      // Additional dynamic viewport height calculation
+      const setVh = () => {
+        const vh = window.innerHeight * 0.01
+        document.documentElement.style.setProperty('--vh', `${vh}px`)
+      }
+      
+      setVh()
+      window.addEventListener('resize', setVh)
+      window.addEventListener('orientationchange', setVh)
+      
+      return () => {
+        // Remove CSS class from body
+        document.body.classList.remove('video-call-active')
+        
+        // Restore original body styles
+        document.body.style.overflow = originalOverflow
+        document.body.style.position = originalPosition
+        document.body.style.height = originalHeight
+        document.body.style.width = originalWidth
+        document.body.style.touchAction = originalTouchAction || ''
+        
+        // Remove event listeners
+        window.removeEventListener('resize', setVh)
+        window.removeEventListener('orientationchange', setVh)
+        
+        // Reset CSS custom property
+        document.documentElement.style.removeProperty('--vh')
+      }
+    }
+  }, [isInCall, isMobile])
+
+  // Prevent pull-to-refresh and page reload during video calls
+  useEffect(() => {
+    if (isInCall) {
+      // Prevent pull-to-refresh on mobile
+      const preventPullToRefresh = (e: TouchEvent) => {
+        // If scrolled to top and trying to scroll up, prevent default
+        if (document.documentElement.scrollTop === 0 && e.touches[0].clientY > e.touches[0].pageY) {
+          e.preventDefault()
+        }
+      }
+
+      // Prevent page refresh via touch gestures
+      const preventRefresh = (e: Event) => {
+        e.preventDefault()
+        return false
+      }
+
+      // Show warning before page reload
+      const beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+        const message = 'You are currently in a video call. Are you sure you want to leave?'
+        e.preventDefault()
+        e.returnValue = message
+        return message
+      }
+
+      // Prevent zoom via keyboard shortcuts
+      const preventZoom = (e: KeyboardEvent) => {
+        if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '-' || e.key === '0')) {
+          e.preventDefault()
+          return false
+        }
+      }
+
+      // Add event listeners
+      document.addEventListener('touchstart', preventPullToRefresh, { passive: false })
+      document.addEventListener('touchmove', preventPullToRefresh, { passive: false })
+      window.addEventListener('beforeunload', beforeUnloadHandler)
+      document.addEventListener('keydown', preventZoom)
+
+      return () => {
+        // Remove event listeners
+        document.removeEventListener('touchstart', preventPullToRefresh)
+        document.removeEventListener('touchmove', preventPullToRefresh)
+        window.removeEventListener('beforeunload', beforeUnloadHandler)
+        document.removeEventListener('keydown', preventZoom)
+      }
+    }
+  }, [isInCall])
+
   const calculateSafePosition = () => {
     const mobile = window.innerWidth <= 768
 
-    // Smaller dimensions for mobile to ensure it fits
     const containerWidth = mobile ? 100 : 192
     const containerHeight = mobile ? 133 : 144
     const margin = mobile ? 12 : 16
 
-    // Calculate available space based on screen state
     let availableWidth = window.innerWidth
     let availableHeight = window.innerHeight
 
     if (mobile) {
-      // For mobile, account for header and controls
-      const headerHeight = isInCall ? 0 : 80 // Header hidden in call
-      const controlsHeight = (connectionStatus === "searching" || connectionStatus === "matched" || isInCall) && showControls ? 80 : 0
-      availableHeight = window.innerHeight - headerHeight - controlsHeight - 20 // Extra padding
+      if (isInCall) {
+        // In call mode on mobile - reserve space for controls
+        availableHeight = window.innerHeight - 100 // Fixed 100px for controls
+      } else {
+        const headerHeight = 80 
+        const controlsHeight = (connectionStatus === "searching" || connectionStatus === "matched") ? 100 : 0
+        availableHeight = window.innerHeight - headerHeight - controlsHeight - 20
+      }
     } else {
-      // For desktop, use video container if available
       if (videoContainerRef.current) {
         const rect = videoContainerRef.current.getBoundingClientRect()
         availableWidth = rect.width
         availableHeight = rect.height
       } else {
-        // Fallback for desktop - controls always visible on desktop
         const controlsHeight = (connectionStatus === "searching" || connectionStatus === "matched" || isInCall) ? 80 : 0
-        availableHeight = window.innerHeight - 160 - controlsHeight // Account for header/controls
+        availableHeight = window.innerHeight - 160 - controlsHeight 
       }
     }
 
@@ -139,7 +233,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     checkMobile()
     window.addEventListener("resize", checkMobile)
     return () => window.removeEventListener("resize", checkMobile)
-  }, [connectionStatus, isInCall, showControls]) // Recalculate when state changes
+  }, [connectionStatus, isInCall]) // Recalculate when state changes
 
   // Handle window resize and state changes
   useEffect(() => {
@@ -164,7 +258,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     return () => {
       window.removeEventListener("resize", handleResize)
     }
-  }, [connectionStatus, isInCall, showControls])
+  }, [connectionStatus, isInCall])
 
   // Draggable functionality for local video
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -297,60 +391,9 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     }
   }, [isDragging, dragStart, localVideoPosition])
 
-  // Auto-hide controls functionality (mobile only)
-  const startControlsTimeout = () => {
-    if (controlsTimeoutId) {
-      clearTimeout(controlsTimeoutId)
-    }
-    
-    // Only auto-hide controls during actual calls on mobile
-    if (isInCall && isMobile) {
-      const timeoutId = setTimeout(() => {
-        setShowControls(false)
-      }, 5000) // Hide after 5 seconds
-      
-      setControlsTimeoutId(timeoutId)
-    }
-  }
-
   const handleScreenClick = () => {
-    // Only allow auto-hide on mobile devices and only during actual calls
-    if (isInCall && isMobile) {
-      setShowControls(!showControls)
-      
-      if (controlsTimeoutId) {
-        clearTimeout(controlsTimeoutId)
-        setControlsTimeoutId(null)
-      }
-      
-      if (!showControls) {
-        // If showing controls, start the timeout to hide them again
-        startControlsTimeout()
-      }
-    }
+    // Simple click handler - no auto-hide functionality
   }
-
-  // Start controls timeout when call starts or status changes
-  useEffect(() => {
-    if (isInCall && isMobile) {
-      // Only start auto-hide timeout during actual calls on mobile
-      setShowControls(true)
-      startControlsTimeout()
-    } else {
-      // For all other states (searching, matched, etc.), always show controls
-      setShowControls(true)
-      if (controlsTimeoutId) {
-        clearTimeout(controlsTimeoutId)
-        setControlsTimeoutId(null)
-      }
-    }
-    
-    return () => {
-      if (controlsTimeoutId) {
-        clearTimeout(controlsTimeoutId)
-      }
-    }
-  }, [isInCall, connectionStatus, isMobile])
 
   // Call timer effect
   useEffect(() => {
@@ -382,17 +425,6 @@ export default function VideoChat({ onBack }: VideoChatProps) {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-  }
-
-  // Reset timeout when user interacts with controls (mobile only)
-  const resetControlsTimeout = () => {
-    if (isMobile) {
-      if (controlsTimeoutId) {
-        clearTimeout(controlsTimeoutId)
-      }
-      setShowControls(true)
-      startControlsTimeout()
-    }
   }
 
   const cleanup = () => {
@@ -1060,7 +1092,9 @@ export default function VideoChat({ onBack }: VideoChatProps) {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-white overflow-hidden relative">
+    <div className={`flex flex-col bg-slate-950 text-white overflow-hidden relative prevent-zoom ${
+      isInCall && isMobile ? 'fixed inset-0 h-screen w-screen' : 'h-screen'
+    } ${isInCall ? 'video-call-active' : ''}`}>
       <style jsx>{`
         .smooth-transition {
           transition: top 0.3s ease-out, left 0.3s ease-out;
@@ -1081,6 +1115,71 @@ export default function VideoChat({ onBack }: VideoChatProps) {
           -moz-user-drag: none;
           -o-user-drag: none;
           user-drag: none;
+        }
+        
+        /* Fix mobile browser viewport issues */
+        .mobile-video-container {
+          height: 100vh;
+          height: calc(var(--vh, 1vh) * 100); /* Use custom viewport height */
+          min-height: 100vh;
+          min-height: calc(var(--vh, 1vh) * 100);
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          z-index: 9999;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior: none;
+          touch-action: manipulation;
+        }
+        
+        /* Prevent mobile browser from zooming and pull-to-refresh */
+        .prevent-zoom {
+          touch-action: manipulation;
+          -webkit-touch-callout: none;
+          -webkit-user-select: none;
+          -khtml-user-select: none;
+          -moz-user-select: none;
+          -ms-user-select: none;
+          user-select: none;
+          -webkit-user-zoom: none;
+          -moz-user-zoom: none;
+          -o-user-zoom: none;
+          user-zoom: none;
+          zoom: 1;
+        }
+        
+        /* Disable pull-to-refresh during video calls */
+        .video-call-active {
+          overscroll-behavior: none;
+          -webkit-overflow-scrolling: touch;
+          overflow: hidden;
+          touch-action: manipulation;
+          -webkit-user-drag: none;
+          -khtml-user-drag: none;
+          -moz-user-drag: none;
+          -o-user-drag: none;
+          user-drag: none;
+          -webkit-overscroll-behavior: none;
+          overscroll-behavior-y: none;
+          -webkit-touch-callout: none;
+        }
+        
+        /* Additional protection for video container */
+        .video-call-active * {
+          touch-action: manipulation !important;
+          -webkit-touch-callout: none !important;
+          -webkit-user-select: none !important;
+          -webkit-tap-highlight-color: transparent !important;
+        }
+        
+        /* Fix iOS Safari viewport issues */
+        @supports (-webkit-touch-callout: none) {
+          .mobile-video-container {
+            height: -webkit-fill-available;
+            min-height: -webkit-fill-available;
+          }
         }
         
         @keyframes float {
@@ -1156,7 +1255,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
       {/* Header Section - Premium Design */}
       <header
         className={`relative z-50 backdrop-blur-2xl bg-slate-950/95 border-b border-slate-800/50 transition-all duration-300 ${
-          isInCall ? "hidden md:block" : ""
+          isInCall ? "hidden" : ""
         }`}
       >
         <div className="flex items-center justify-between p-4 max-w-7xl mx-auto">
@@ -1206,7 +1305,25 @@ export default function VideoChat({ onBack }: VideoChatProps) {
       </header>
 
 
-      <div ref={videoContainerRef} className="flex-1 relative bg-slate-950 overflow-hidden" onClick={handleScreenClick}>
+      <div ref={videoContainerRef} className={`relative bg-slate-950 overflow-hidden prevent-zoom ${
+        isInCall && isMobile ? 'h-screen' : 'flex-1'
+      }`} onClick={handleScreenClick}
+      onTouchStart={(e) => {
+        // Prevent pull-to-refresh when touching the video container
+        if (isInCall && document.documentElement.scrollTop === 0) {
+          e.preventDefault()
+        }
+      }}
+      onTouchMove={(e) => {
+        // Prevent pull-to-refresh during touch move
+        if (isInCall && document.documentElement.scrollTop === 0) {
+          e.preventDefault()
+        }
+      }}
+      style={{
+        touchAction: 'manipulation',
+        overscrollBehavior: 'none'
+      }}>
         
         {/* Call Timer */}
         {isInCall && (
@@ -1423,32 +1540,32 @@ export default function VideoChat({ onBack }: VideoChatProps) {
         )}
       </div>
 
-      {/* Premium Controls Section */}
-      {(connectionStatus === "searching" || connectionStatus === "matched" || isInCall) && 
-       (!isMobile || showControls) && (
-        <div className="relative z-50 backdrop-blur-2xl bg-slate-950/95 border-t border-slate-800/50 pb-safe transition-all duration-300">
-          {/* Premium gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-transparent"></div>
-          
-          <div className="p-6 relative z-10">
-            <div className="flex items-center justify-center space-x-6 max-w-md mx-auto">
+      {/* Controls Section - Simple and always visible */}
+      {(connectionStatus === "connected" || connectionStatus === "searching" || connectionStatus === "matched" || isInCall) && (
+        <div 
+          className="relative z-50 bg-slate-950/95 border-t border-slate-700/50"
+          style={{
+            paddingBottom: 'env(safe-area-inset-bottom, 20px)',
+            minHeight: '80px'
+          }}
+        >
+          <div className="p-4">
+            <div className="flex items-center justify-center space-x-4 max-w-sm mx-auto">
               <button
                 onClick={(e) => {
                   e.stopPropagation()
                   toggleAudio()
-                  resetControlsTimeout()
                 }}
-                className={`group p-4 rounded-2xl transition-all duration-300 shadow-xl hover:scale-105 border backdrop-blur-sm relative overflow-hidden ${
+                className={`p-3 rounded-xl transition-all duration-200 ${
                   isAudioEnabled
-                    ? "bg-slate-800/60 hover:bg-slate-700/70 text-white border-slate-600/40 hover:border-slate-500/60"
-                    : "bg-red-600/90 hover:bg-red-500/95 text-white border-red-500/40 shadow-red-500/20"
+                    ? "bg-slate-800 hover:bg-slate-700 text-white"
+                    : "bg-red-600 hover:bg-red-500 text-white"
                 }`}
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 {isAudioEnabled ? (
-                  <Mic className="w-6 h-6 group-hover:scale-110 transition-transform relative z-10" />
+                  <Mic className="w-5 h-5" />
                 ) : (
-                  <MicOff className="w-6 h-6 group-hover:scale-110 transition-transform relative z-10" />
+                  <MicOff className="w-5 h-5" />
                 )}
               </button>
 
@@ -1456,19 +1573,17 @@ export default function VideoChat({ onBack }: VideoChatProps) {
                 onClick={(e) => {
                   e.stopPropagation()
                   toggleVideo()
-                  resetControlsTimeout()
                 }}
-                className={`group p-4 rounded-2xl transition-all duration-300 shadow-xl hover:scale-105 border backdrop-blur-sm relative overflow-hidden ${
+                className={`p-3 rounded-xl transition-all duration-200 ${
                   isVideoEnabled
-                    ? "bg-slate-800/60 hover:bg-slate-700/70 text-white border-slate-600/40 hover:border-slate-500/60"
-                    : "bg-red-600/90 hover:bg-red-500/95 text-white border-red-500/40 shadow-red-500/20"
+                    ? "bg-slate-800 hover:bg-slate-700 text-white"
+                    : "bg-red-600 hover:bg-red-500 text-white"
                 }`}
               >
-                <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 {isVideoEnabled ? (
-                  <Video className="w-6 h-6 group-hover:scale-110 transition-transform relative z-10" />
+                  <Video className="w-5 h-5" />
                 ) : (
-                  <VideoOff className="w-6 h-6 group-hover:scale-110 transition-transform relative z-10" />
+                  <VideoOff className="w-5 h-5" />
                 )}
               </button>
 
@@ -1477,12 +1592,10 @@ export default function VideoChat({ onBack }: VideoChatProps) {
                   onClick={(e) => {
                     e.stopPropagation()
                     leaveCall()
-                    resetControlsTimeout()
                   }}
-                  className="group p-4 rounded-2xl bg-red-600/90 hover:bg-red-500/95 text-white transition-all duration-300 shadow-xl hover:scale-105 border border-red-500/40 shadow-red-500/20 backdrop-blur-sm relative overflow-hidden"
+                  className="p-3 rounded-xl bg-red-600 hover:bg-red-500 text-white transition-all duration-200"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  <PhoneOff className="w-6 h-6 group-hover:scale-110 transition-transform relative z-10" />
+                  <PhoneOff className="w-5 h-5" />
                 </button>
               )}
             </div>
