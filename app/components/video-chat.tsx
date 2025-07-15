@@ -1400,7 +1400,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
               disablePictureInPicture
               controlsList="nodownload nofullscreen noremoteplayback"
               className="relative z-10 w-full h-full object-cover bg-transparent" 
-              style={{ background: "transparent" }}
+              style={{ background: "transparent", transform: "scaleX(-1)" }}
               onContextMenu={(e) => e.preventDefault()}
             />
             
