@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { ArrowLeft, Video, VideoOff, Mic, MicOff, PhoneOff, Users, Search, X } from "lucide-react"
+import { ArrowLeft, Video, VideoOff, Mic, MicOff, PhoneOff, Users, Search, X, RotateCcw } from "lucide-react"
 import config from "../lib/config"
 
 const WEBSOCKET_URL = config.videoUrl
@@ -27,6 +27,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
 
   const [isVideoEnabled, setIsVideoEnabled] = useState(true)
   const [isAudioEnabled, setIsAudioEnabled] = useState(true)
+  const [cameraFacing, setCameraFacing] = useState<'user' | 'environment'>('user') // 'user' = front, 'environment' = back
   const [isInCall, setIsInCall] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -616,7 +617,7 @@ export default function VideoChat({ onBack }: VideoChatProps) {
           height: { ideal: 720, max: 1080 },
           frameRate: { ideal: 30, min: 20, max: 60 }, // Prioritize higher frame rates
           aspectRatio: { ideal: 16 / 9 },
-          facingMode: "user",
+          facingMode: cameraFacing,
         },
         audio: {
           echoCancellation: { exact: true },
@@ -885,6 +886,68 @@ export default function VideoChat({ onBack }: VideoChatProps) {
         audioTrack.enabled = !audioTrack.enabled
         setIsAudioEnabled(audioTrack.enabled)
       }
+    }
+  }
+
+  const flipCamera = async () => {
+    if (!localStreamRef.current) return
+
+    try {
+      // Stop current video stream
+      const videoTrack = localStreamRef.current.getVideoTracks()[0]
+      if (videoTrack) {
+        videoTrack.stop()
+      }
+
+      // Toggle camera facing
+      const newFacing = cameraFacing === 'user' ? 'environment' : 'user'
+      setCameraFacing(newFacing)
+
+      // Get new stream with different camera
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: { ideal: 30, min: 20, max: 60 },
+          aspectRatio: { ideal: 16 / 9 },
+          facingMode: newFacing,
+        },
+        audio: false, // Keep existing audio track
+      })
+
+      // Replace video track in the stream
+      const newVideoTrack = newStream.getVideoTracks()[0]
+      const audioTrack = localStreamRef.current.getAudioTracks()[0]
+
+      // Create new stream with new video and existing audio
+      const combinedStream = new MediaStream()
+      if (newVideoTrack) {
+        newVideoTrack.enabled = isVideoEnabled
+        combinedStream.addTrack(newVideoTrack)
+      }
+      if (audioTrack) {
+        combinedStream.addTrack(audioTrack)
+      }
+
+      // Update local video element
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = combinedStream
+      }
+
+      // Update peer connection if in call
+      if (peerConnectionRef.current && isInCall) {
+        const sender = peerConnectionRef.current.getSenders().find(s => 
+          s.track && s.track.kind === 'video'
+        )
+        if (sender && newVideoTrack) {
+          await sender.replaceTrack(newVideoTrack)
+        }
+      }
+
+      localStreamRef.current = combinedStream
+    } catch (error) {
+      console.error('Error flipping camera:', error)
+      setError('Unable to switch camera. Please try again.')
     }
   }
 
@@ -1586,6 +1649,20 @@ export default function VideoChat({ onBack }: VideoChatProps) {
                   <VideoOff className="w-5 h-5" />
                 )}
               </button>
+
+              {/* Camera Flip Button - Only show on mobile/touch devices */}
+              {isVideoEnabled && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    flipCamera()
+                  }}
+                  className="p-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-all duration-200"
+                  title={`Switch to ${cameraFacing === 'user' ? 'back' : 'front'} camera`}
+                >
+                  <RotateCcw className="w-5 h-5" />
+                </button>
+              )}
 
               {(connectionStatus === "matched" || isInCall) && (
                 <button
