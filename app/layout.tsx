@@ -16,9 +16,11 @@ export const metadata: Metadata = {
   title: "AnnoChat",
   description: "Chat with strangers!!",
   icons: {
-    icon:"/logo.ico"
-  }
+    icon: "/logo.ico",
+  },
 };
+
+const analyticsOn = process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === "true";
 
 export default function RootLayout({
   children,
@@ -28,36 +30,27 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* Mobile viewport optimization for video chat */}
-        <meta 
-          name="viewport" 
-          content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" 
-        />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        
-        {/* Google Analytics Tag */}
-        <script
-          async
-          src="https://www.googletagmanager.com/gtag/js?id=G-YNJQ0N6Z6E"
-        ></script>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
+        {analyticsOn && (
+          <>
+            <script async src="https://www.googletagmanager.com/gtag/js?id=G-YNJQ0N6Z6E" />
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `
               window.dataLayer = window.dataLayer || [];
               function gtag(){dataLayer.push(arguments);}
               gtag('js', new Date());
               gtag('config', 'G-YNJQ0N6Z6E');
             `,
-          }}
-        />
+              }}
+            />
+          </>
+        )}
       </head>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        {children}
-      </body>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>{children}</body>
     </html>
   );
 }

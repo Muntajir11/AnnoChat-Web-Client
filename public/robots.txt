@@ -3,7 +3,7 @@ User-agent: *
 Allow: /
 
 # Host
-Host: https://annochat.social
+Host: https://annochat.me
 
 # Sitemaps
-Sitemap: https://annochat.social/sitemap.xml
+Sitemap: https://annochat.me/sitemap.xml

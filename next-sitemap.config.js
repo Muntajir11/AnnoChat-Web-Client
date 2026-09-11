@@ -1,6 +1,6 @@
 /** @type {import('next-sitemap').IConfig} */
 module.exports = {
-  siteUrl: 'https://annochat.social',
+  siteUrl: 'https://annochat.me',
   generateRobotsTxt: true,
   sitemapSize: 5000,
   changefreq: 'weekly',

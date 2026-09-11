@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ArrowRight, MessageSquare, Shield, Users, X, Smartphone, Download, Sparkles, Zap, Video } from "lucide-react"
+import { ArrowRight, MessageSquare, Shield, Users, X, Smartphone, Download, Sparkles, Video } from "lucide-react"
 import RandomChat from "./random-chat"
 import VideoChat from "./video-chat"
 
@@ -230,7 +230,7 @@ export default function HomePage() {
                     </div>
                     <div className="bg-gradient-to-r from-neutral-800/70 to-neutral-700/70 p-4 rounded-2xl ml-8 border border-white/[0.1] backdrop-blur-sm shadow-lg">
                       <div className="text-neutral-300 text-xs font-medium mb-1">You</div>
-                      <div className="text-white text-sm">Hi there! I'm doing great, thanks!</div>
+                      <div className="text-white text-sm">Hi there! I&apos;m doing great, thanks!</div>
                     </div>
                     <div className="bg-gradient-to-r from-neutral-900/70 to-neutral-800/70 p-4 rounded-2xl border border-white/[0.1] backdrop-blur-sm shadow-lg">
                       <div className="text-neutral-300 text-xs font-medium mb-1">Stranger</div>
