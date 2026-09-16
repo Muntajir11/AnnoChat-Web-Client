@@ -1,10 +1,13 @@
-export async function getCallMedia(_facing?: 'user' | 'environment'): Promise<MediaStream> {
+export async function getCallMedia(facing: 'user' | 'environment' = 'user'): Promise<MediaStream> {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
     throw new Error('Camera API is not available in this browser. Use localhost or HTTPS.');
   }
 
   try {
-    return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    return await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: facing } },
+      audio: true,
+    });
   } catch (first) {
     const devices = await navigator.mediaDevices.enumerateDevices().catch(() => [] as MediaDeviceInfo[]);
     const videos = devices.filter((d) => d.kind === 'videoinput' && d.deviceId);
