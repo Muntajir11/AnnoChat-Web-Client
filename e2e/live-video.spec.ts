@@ -7,7 +7,7 @@ test.use({
   permissions: ['camera', 'microphone'],
 });
 
-test('video is gated until 18+ then two tabs can match', async ({ browser }) => {
+test('two tabs can match for video', async ({ browser }) => {
   test.skip(!process.env.E2E, 'Set E2E=1 with redis+server+web running');
   test.setTimeout(60000);
   const a = await browser.newContext({ permissions: ['camera', 'microphone'] });
@@ -16,13 +16,10 @@ test('video is gated until 18+ then two tabs can match', async ({ browser }) => 
   const pageB = await b.newPage();
   await pageA.goto('/');
   await pageA.getByText('Start Video Chat').click();
-  await expect(pageA.getByText('You must be 18+')).toBeVisible();
-  await pageA.getByRole('button', { name: 'I am 18 or older' }).click();
   await expect(pageA.getByRole('button', { name: /Find match/ })).toBeVisible({ timeout: 15000 });
 
   await pageB.goto('/');
   await pageB.getByText('Start Video Chat').click();
-  await pageB.getByRole('button', { name: 'I am 18 or older' }).click();
   await expect(pageB.getByRole('button', { name: /Find match/ })).toBeVisible({ timeout: 15000 });
 
   await pageA.getByRole('button', { name: /Find match/ }).click();

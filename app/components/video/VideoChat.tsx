@@ -10,8 +10,6 @@ import { CallStatus } from "./CallStatus"
 import { LocalVideoOverlay } from "./LocalVideoOverlay"
 import { getCallMedia, mediaErrorMessage } from "../../lib/media"
 
-const AGE_KEY = "annochat-18"
-
 export default function VideoChat({ onBack }: { onBack: () => void }) {
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
@@ -20,7 +18,6 @@ export default function VideoChat({ onBack }: { onBack: () => void }) {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
   const [isVideoEnabled, setIsVideoEnabled] = useState(true)
   const [isAudioEnabled, setIsAudioEnabled] = useState(true)
-  const [ageOk, setAgeOk] = useState(false)
   const [reported, setReported] = useState(false)
   const [mediaError, setMediaError] = useState<string | null>(null)
   useVideoTuning(localStream)
@@ -34,15 +31,10 @@ export default function VideoChat({ onBack }: { onBack: () => void }) {
   })
 
   useEffect(() => {
-    setAgeOk(localStorage.getItem(AGE_KEY) === "1")
-  }, [])
-
-  useEffect(() => {
-    if (!ageOk) return
     void signaling.connect("video")
     return () => signaling.disconnect()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- connect once after age gate
-  }, [ageOk])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- connect once per mount
+  }, [])
 
   useEffect(() => {
     if (localVideoRef.current) localVideoRef.current.srcObject = localStream
@@ -86,28 +78,6 @@ export default function VideoChat({ onBack }: { onBack: () => void }) {
     } catch (err) {
       setMediaError(mediaErrorMessage(err))
     }
-  }
-
-  function acceptAge() {
-    localStorage.setItem(AGE_KEY, "1")
-    setAgeOk(true)
-  }
-
-  if (!ageOk) {
-    return (
-      <div className="h-screen bg-slate-950 text-white flex items-center justify-center p-6">
-        <div className="max-w-md space-y-4">
-          <h2 className="text-2xl font-bold">You must be 18+</h2>
-          <p className="text-slate-400">Video chat is only for adults. Confirm you are 18 or older.</p>
-          <button onClick={acceptAge} className="bg-white text-black px-6 py-3 rounded-xl font-semibold">
-            I am 18 or older
-          </button>
-          <button onClick={onBack} className="block text-slate-400">
-            Back
-          </button>
-        </div>
-      </div>
-    )
   }
 
   return (

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type FormEvent } from "react"
 import { Send, Users, RefreshCw, XCircle, ArrowLeft, Flag } from "lucide-react"
 import { useSignaling } from "../hooks/useSignaling"
 import { usePeerChat } from "../hooks/usePeerChat"
-import { filterText } from "../lib/filter"
 import { MAX_INPUT_CHARS, MAX_RELAY_TEXT } from "../lib/protocol"
 
 function connectionLabel(status: string) {
@@ -17,7 +16,6 @@ function connectionLabel(status: string) {
 
 export default function RandomChat({ onBack }: { onBack?: () => void }) {
   const [inputValue, setInputValue] = useState("")
-  const [filterOn, setFilterOn] = useState(true)
   const [reported, setReported] = useState(false)
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -95,13 +93,6 @@ export default function RandomChat({ onBack }: { onBack?: () => void }) {
               <Flag className="w-4 h-4" />
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setFilterOn((v) => !v)}
-            className="bg-gray-700 px-3 py-2 rounded-full text-sm"
-          >
-            {filterOn ? "Filter on" : "Filter off"}
-          </button>
           <div className="flex items-center bg-gray-700 px-3 py-2 rounded-full text-sm" title="Includes you">
             <Users className="w-5 h-5 mr-2 text-emerald-400" />
             <span>{signaling.online} online</span>
@@ -137,7 +128,7 @@ export default function RandomChat({ onBack }: { onBack?: () => void }) {
                   msg.sender === "you" ? "bg-emerald-600 text-white" : "bg-gray-700"
                 }`}
               >
-                {msg.sender === "you" ? msg.text : filterText(msg.text, filterOn)}
+                {msg.text}
               </div>
             </div>
           ),

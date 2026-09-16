@@ -517,8 +517,7 @@ export default function HomePage() {
                   "No harassment, hate speech, or bullying",
                   "No explicit or inappropriate content",
                   "No spamming or flooding the chat",
-                  "Users must be 18+ to use this service",
-                  "Conversations are not monitored or stored",
+                  "Conversations are not stored",
                 ].map((rule, index) => (
                   <li key={index} className="flex items-start">
                     <div className="w-2 h-2 bg-gradient-to-r from-white to-neutral-300 rounded-full mr-3 mt-2 flex-shrink-0 shadow-lg"></div>
