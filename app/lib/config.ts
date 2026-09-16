@@ -2,9 +2,9 @@ const isDev = process.env.NODE_ENV !== 'production';
 
 export const config = {
   isDev,
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || (isDev ? 'http://localhost:3000' : 'https://annochat.me'),
-  serverHttp: process.env.NEXT_PUBLIC_SERVER_HTTP || (isDev ? 'http://localhost:5000' : 'https://api.annochat.me'),
-  serverWs: process.env.NEXT_PUBLIC_SERVER_WS || (isDev ? 'ws://localhost:5000' : 'wss://api.annochat.me'),
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL || (isDev ? 'http://localhost:3000' : 'https://annnochat.me'),
+  serverHttp: process.env.NEXT_PUBLIC_SERVER_HTTP || (isDev ? 'http://localhost:5000' : 'https://api.annnochat.me'),
+  serverWs: process.env.NEXT_PUBLIC_SERVER_WS || (isDev ? 'ws://localhost:5000' : 'wss://api.annnochat.me'),
   enableAnalytics: process.env.NEXT_PUBLIC_ENABLE_ANALYTICS === 'true',
   turnUrl: process.env.NEXT_PUBLIC_TURN_URL || '',
   turnUser: process.env.NEXT_PUBLIC_TURN_USER || '',
