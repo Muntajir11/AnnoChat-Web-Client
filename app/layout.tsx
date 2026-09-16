@@ -36,14 +36,14 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         {analyticsOn && (
           <>
-            <script async src="https://www.googletagmanager.com/gtag/js?id=G-YNJQ0N6Z6E" />
+            <script async src="https://www.googletagmanager.com/gtag/js?id=G-CJ7DWMJE2H" />
             <script
               dangerouslySetInnerHTML={{
                 __html: `
               window.dataLayer = window.dataLayer || [];
               function gtag(){dataLayer.push(arguments);}
               gtag('js', new Date());
-              gtag('config', 'G-YNJQ0N6Z6E');
+              gtag('config', 'G-CJ7DWMJE2H');
             `,
               }}
             />
